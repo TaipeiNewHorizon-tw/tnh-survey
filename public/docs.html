@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>系統說明書 — 臺北文創場地體驗滿意度問卷</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --orange: #ff9900;
+  --orange-bg: rgba(255,153,0,0.10);
+  --text: #1a1000;
+  --text-2: #4a3c28;
+  --text-3: #9a8878;
+  --bg: #faf8f5;
+  --surface: #ffffff;
+  --border: #e8e2d8;
+  --radius: 12px;
+}
+
+body {
+  font-family: -apple-system, "PingFang TC", "Noto Sans TC", "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+/* ── Header ── */
+.doc-header {
+  background: var(--orange);
+  padding: 32px 24px 28px;
+  text-align: center;
+}
+.doc-header img {
+  height: 48px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 4px 10px;
+  margin-bottom: 14px;
+}
+.doc-header h1 {
+  font-size: 22px;
+  font-weight: 800;
+  color: #1a0a00;
+  letter-spacing: 0.5px;
+}
+.doc-header .subtitle {
+  font-size: 14px;
+  color: rgba(0,0,0,0.55);
+  margin-top: 4px;
+}
+.doc-header .meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+  background: rgba(0,0,0,0.10);
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 13px;
+  color: rgba(0,0,0,0.60);
+}
+
+/* ── Layout ── */
+.doc-body {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+/* ── TOC ── */
+.toc {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--orange);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 36px;
+}
+.toc h2 { font-size: 14px; color: var(--text-3); font-weight: 600; margin-bottom: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.toc ol { padding-left: 20px; }
+.toc li { margin: 4px 0; }
+.toc a { color: var(--orange); text-decoration: none; font-size: 15px; font-weight: 500; }
+.toc a:hover { text-decoration: underline; }
+
+/* ── Sections ── */
+.doc-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 32px;
+  margin-bottom: 20px;
+}
+.doc-section h2 {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--orange-bg);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.doc-section h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-2);
+  margin: 20px 0 8px;
+}
+.doc-section p { color: var(--text-2); margin-bottom: 10px; font-size: 15px; }
+.doc-section ul, .doc-section ol { padding-left: 20px; color: var(--text-2); font-size: 15px; }
+.doc-section li { margin: 4px 0; }
+
+/* ── Question structure ── */
+.section-group {
+  margin-bottom: 18px;
+}
+.section-group-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--orange);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+.q-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--bg);
+  margin-bottom: 6px;
+}
+.q-num {
+  min-width: 24px;
+  height: 24px;
+  background: var(--orange);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.q-content { flex: 1; }
+.q-text { font-size: 15px; color: var(--text); font-weight: 500; }
+.q-meta { font-size: 12px; color: var(--text-3); margin-top: 3px; }
+.q-badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+  background: var(--orange-bg);
+  color: #8a5000;
+  margin-right: 4px;
+}
+.q-badge.required { background: #fef2f2; color: #991b1b; }
+.q-badge.inactive { background: #f3f4f6; color: #6b7280; }
+
+/* ── Tech stack ── */
+.tech-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 4px;
+}
+.tech-item {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+.tech-item .tech-label { font-size: 12px; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.tech-item .tech-val { font-size: 15px; color: var(--text); font-weight: 600; margin-top: 2px; }
+
+/* ── Loading / error ── */
+.loading { color: var(--text-3); font-size: 14px; padding: 16px 0; }
+.error-msg { color: #991b1b; font-size: 14px; }
+
+/* ── Back button ── */
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--orange);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 24px;
+}
+.back-btn:hover { text-decoration: underline; }
+
+/* ── Footer ── */
+.doc-footer {
+  text-align: center;
+  color: var(--text-3);
+  font-size: 13px;
+  padding: 20px;
+}
+</style>
+</head>
+<body>
+
+<div class="doc-header">
+  <img src="/logo.jpg" alt="臺北文創 Taipei New Horizon">
+  <h1>場地體驗滿意度問卷系統 — 說明書</h1>
+  <p class="subtitle">Taipei New Horizon Venue Survey System Documentation</p>
+  <div class="meta">
+    <span>📅 本頁資料即時同步</span>
+    <span id="gen-time">讀取中...</span>
+  </div>
+</div>
+
+<div class="doc-body">
+
+  <a href="/" class="back-btn">← 返回問卷首頁</a>
+
+  <!-- TOC -->
+  <div class="toc">
+    <h2>目錄</h2>
+    <ol>
+      <li><a href="#sec-overview">系統說明</a></li>
+      <li><a href="#sec-questions">目前問卷題目結構（即時同步）</a></li>
+      <li><a href="#sec-channels">填寫管道</a></li>
+      <li><a href="#sec-admin">後台管理說明</a></li>
+      <li><a href="#sec-tech">技術架構</a></li>
+    </ol>
+  </div>
+
+  <!-- 1. 系統說明 -->
+  <div class="doc-section" id="sec-overview">
+    <h2>① 系統說明</h2>
+    <p>本系統為臺北文創（Taipei New Horizon）專用的線上場地體驗滿意度問卷平台，用於收集活動租場客戶的使用反饋，協助持續改善場地設施與服務品質。</p>
+    <h3>主要功能</h3>
+    <ul>
+      <li>手機／電腦均可填寫的響應式問卷介面</li>
+      <li>支援五等量表（非常滿意 ～ 非常不滿意）、單選、多選、文字等題型</li>
+      <li>後台即時統計分析（圓形圖、KPI 摘要）</li>
+      <li>填寫紀錄查詢、CSV 匯出</li>
+      <li>QR Code 掃碼 / Email 邀請連結雙管道，自動標記來源</li>
+      <li>多人員帳號管理（管理員 / 一般人員）</li>
+    </ul>
+  </div>
+
+  <!-- 2. 問卷題目結構（動態） -->
+  <div class="doc-section" id="sec-questions">
+    <h2>② 目前問卷題目結構</h2>
+    <p style="font-size:13px;color:var(--text-3);margin-bottom:16px">以下內容直接從資料庫讀取，問卷題目若有異動，本頁將自動反映最新內容。</p>
+    <div id="questions-output"><p class="loading">讀取題目中...</p></div>
+  </div>
+
+  <!-- 3. 填寫管道 -->
+  <div class="doc-section" id="sec-channels">
+    <h2>③ 填寫管道</h2>
+    <h3>📱 QR Code 掃碼</h3>
+    <p>將 QR Code 印製於場地現場或活動現場，受訪者掃碼直接開啟問卷。系統自動標記來源為「QR Code 掃碼」，方便後台統計各管道填寫比例。</p>
+    <h3>📧 Email 邀請</h3>
+    <p>後台「發送邀請」功能可開啟信箱，發送含問卷連結的邀請信。系統自動於連結附加 <code>?source=email</code>，後台可篩選查看 Email 邀請的填寫結果。</p>
+    <h3>🔗 直接連結</h3>
+    <p>直接分享問卷網址給受訪者，填寫來源標記為「直接開啟」。</p>
+  </div>
+
+  <!-- 4. 後台管理說明 -->
+  <div class="doc-section" id="sec-admin">
+    <h2>④ 後台管理說明</h2>
+    <h3>登入方式</h3>
+    <p>開啟 <strong>/admin</strong> 路徑，輸入帳號密碼登入。帳號由管理員在後台「帳號管理」分頁新增。</p>
+    <h3>各功能分頁</h3>
+    <ul>
+      <li><strong>題目管理</strong> — 檢視、編輯、排序、上下架題目</li>
+      <li><strong>新增題目</strong> — 新增各種題型的題目</li>
+      <li><strong>統計分析</strong> — 圓形圖顯示各題平均分數與分布；KPI 摘要顯示整體平均、非常滿意占比、總回應數</li>
+      <li><strong>填寫紀錄</strong> — 逐筆查閱每份問卷內容，支援分頁</li>
+      <li><strong>發送邀請</strong> — 開啟信箱寄送邀請信</li>
+      <li><strong>帳號管理</strong>（管理員限定）— 新增/停用人員帳號、設定刪除密碼</li>
+      <li><strong>操作紀錄</strong>（管理員限定）— 查閱所有後台操作歷程</li>
+    </ul>
+    <h3>CSV 匯出</h3>
+    <p>後台側邊欄底部「⬇ 下載 CSV」按鈕可匯出全部填寫資料，可用 Excel 開啟分析。</p>
+  </div>
+
+  <!-- 5. 技術架構 -->
+  <div class="doc-section" id="sec-tech">
+    <h2>⑤ 技術架構</h2>
+    <div class="tech-grid">
+      <div class="tech-item">
+        <div class="tech-label">後端框架</div>
+        <div class="tech-val">Node.js + Express</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-label">資料庫</div>
+        <div class="tech-val">SQLite（node:sqlite 內建）</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-label">部署平台</div>
+        <div class="tech-val">Railway（Hobby Plan）</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-label">身份驗證</div>
+        <div class="tech-val">express-session + bcryptjs</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-label">前端</div>
+        <div class="tech-val">HTML / CSS / 原生 JS（無框架）</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-label">程式碼儲存</div>
+        <div class="tech-val">GitHub（TaipeiNewHorizon-tw）</div>
+      </div>
+    </div>
+    <h3 style="margin-top:20px">資料流程</h3>
+    <ul>
+      <li>填寫者開啟問卷 → 前端讀取 <code>/api/questions</code></li>
+      <li>送出後存入 SQLite（responses + answers 資料表）</li>
+      <li>後台登入後透過各 <code>/api/admin/*</code> 端點存取資料</li>
+      <li>統計分析由後端即時計算後回傳，前端以 SVG 圓形圖呈現</li>
+    </ul>
+  </div>
+
+</div>
+
+<div class="doc-footer">
+  臺北文創場地體驗滿意度問卷系統 &copy; Taipei New Horizon
+</div>
+
+<script>
+// ── 顯示目前時間 ──
+document.getElementById('gen-time').textContent =
+  '更新於 ' + new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+// ── 動態讀取題目結構 ──
+const TYPE_LABELS = {
+  shorttext:   '簡短文字',
+  longtext:    '長文字',
+  date:        '日期',
+  likert5:     '五等量表',
+  choice:      '單選',
+  multichoice: '多選',
+};
+
+async function loadQuestions() {
+  const el = document.getElementById('questions-output');
+  try {
+    const res = await fetch('/api/admin/questions', { credentials: 'include' });
+    // 若未登入，改用公開API（只有上架題目）
+    const data = res.ok ? await res.json() : await fetch('/api/questions').then(r => r.json());
+    const questions = res.ok ? data : data;
+
+    if (!questions.length) {
+      el.innerHTML = '<p class="loading">目前尚無題目。</p>';
+      return;
+    }
+
+    // 依 section 分組
+    const groups = {};
+    questions.forEach(q => {
+      const sec = q.section || '（未分類）';
+      if (!groups[sec]) groups[sec] = [];
+      groups[sec].push(q);
+    });
+
+    let html = '';
+    let num = 1;
+    Object.entries(groups).forEach(([sec, qs]) => {
+      html += `<div class="section-group">
+        <div class="section-group-label">${escHtml(sec)}</div>`;
+      qs.forEach(q => {
+        const typeLabel = TYPE_LABELS[q.type] || q.type;
+        const reqBadge = q.required ? '<span class="q-badge required">必填</span>' : '';
+        const inactiveBadge = q.active === 0 ? '<span class="q-badge inactive">已下架</span>' : '';
+        const optionNote = (q.type === 'choice' || q.type === 'multichoice') && q.options
+          ? `<div style="margin-top:5px;font-size:12px;color:var(--text-3)">選項：${JSON.parse(q.options).join('、')}</div>` : '';
+        html += `<div class="q-item">
+          <div class="q-num">${num++}</div>
+          <div class="q-content">
+            <div class="q-text">${escHtml(q.question_text)}</div>
+            <div class="q-meta">
+              <span class="q-badge">${typeLabel}</span>${reqBadge}${inactiveBadge}
+            </div>
+            ${optionNote}
+          </div>
+        </div>`;
+      });
+      html += '</div>';
+    });
+
+    // 統計
+    const total = questions.length;
+    const active = questions.filter(q => q.active !== 0).length;
+    html += `<p style="font-size:13px;color:var(--text-3);margin-top:12px">共 ${total} 題（上架中 ${active} 題）</p>`;
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<p class="error-msg">無法讀取題目資料，請確認已連線。</p>';
+  }
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+loadQuestions();
+</script>
+</body>
+</html>
