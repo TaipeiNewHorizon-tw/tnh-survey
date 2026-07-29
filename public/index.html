@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>臺北文創場地參與體驗滿意度調查</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="page">
+  <div class="card-container">
+    <h1>臺北文創場地參與體驗滿意度調查</h1>
+    <p class="intro">感謝您今日蒞臨參與本活動。為了提供更優質的環境與服務，誠摯邀請您抽出 1 分鐘填寫這份問卷，您的寶貴意見將是我們進步的動力！</p>
+
+    <form id="survey-form">
+      <div id="questions"></div>
+      <button type="submit" id="submit-btn" class="btn btn-submit">送出問卷</button>
+    </form>
+
+    <div id="thankyou" class="thankyou" hidden>
+      <p>🙏 問卷到此結束，再次感謝您的協助！</p>
+
+      <div class="thankyou-footer">
+        <p class="thankyou-see-you">期待與您在下一次的活動中相見！✨</p>
+
+        <div class="thankyou-social-block">
+          <p class="thankyou-social-title">📢 精彩不散場！掌握更多臺北文創活動資訊：</p>
+          <div class="thankyou-links">
+            <a href="https://www.taipeinewhorizon.com.tw" target="_blank" class="social-link">
+              🔗 臺北文創官網
+            </a>
+            <a href="https://apps.apple.com/tw/app/臺北文創/id998434401" target="_blank" class="social-link social-link--apple">
+              🍎 臺北文創 APP（Apple）
+            </a>
+            <a href="https://play.google.com/store/apps/details?id=com.taipeinewhorizon&pcampaignid=web_share" target="_blank" class="social-link social-link--google">
+              🤖 臺北文創 APP（Android）
+            </a>
+            <a href="https://www.facebook.com/TaipeiNewHorizon" target="_blank" class="social-link social-link--fb">
+              🔵 臺北文創 FB
+            </a>
+            <a href="https://www.instagram.com/taipeinewhorizon" target="_blank" class="social-link social-link--ig">
+              📷 臺北文創 IG
+            </a>
+          </div>
+          <p class="thankyou-social-caption">歡迎點擊上方連結或下載 APP，隨時隨地與我們共享美好時光！</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="error" class="error-box" hidden></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

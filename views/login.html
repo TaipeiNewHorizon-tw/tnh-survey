@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>後台登入 — 臺北文創問卷系統</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
+  background: #f0f2f5;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.login-wrap {
+  width: 100%;
+  max-width: 380px;
+  padding: 16px;
+}
+.login-box {
+  background: #fff;
+  border-radius: 16px;
+  padding: 36px 32px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+}
+.login-logo {
+  text-align: center;
+  margin-bottom: 28px;
+}
+.login-logo h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a1a2e;
+  letter-spacing: 1px;
+}
+.login-logo p {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #444;
+  margin-bottom: 6px;
+  margin-top: 18px;
+}
+input[type="text"], input[type="password"] {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1.5px solid #ddd;
+  border-radius: 10px;
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus { border-color: #007AFF; }
+.login-btn {
+  width: 100%;
+  padding: 13px;
+  background: #007AFF;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 24px;
+  font-family: inherit;
+  transition: opacity 0.15s;
+}
+.login-btn:hover { opacity: 0.88; }
+.login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.error-msg {
+  color: #cf1322;
+  font-size: 13px;
+  margin-top: 12px;
+  text-align: center;
+  min-height: 20px;
+}
+</style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-box">
+    <div class="login-logo">
+      <h1>臺北文創</h1>
+      <p>場地參與體驗問卷 後台管理系統</p>
+    </div>
+    <form id="login-form">
+      <label for="username">帳號</label>
+      <input type="text" id="username" placeholder="請輸入帳號" autocomplete="username" required>
+      <label for="password">密碼</label>
+      <input type="password" id="password" placeholder="請輸入密碼" autocomplete="current-password" required>
+      <button type="submit" class="login-btn" id="login-btn">登入</button>
+      <div class="error-msg" id="error-msg"></div>
+    </form>
+  </div>
+</div>
+<script>
+document.getElementById("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("login-btn");
+  const errEl = document.getElementById("error-msg");
+  btn.disabled = true;
+  btn.textContent = "登入中…";
+  errEl.textContent = "";
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("username").value,
+        password: document.getElementById("password").value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = data.error || "登入失敗，請稍後再試";
+    } else {
+      window.location.href = "/admin";
+    }
+  } catch {
+    errEl.textContent = "網路錯誤，請稍後再試";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "登入";
+  }
+});
+</script>
+</body>
+</html>
