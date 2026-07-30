@@ -35,6 +35,7 @@
       <button class="tab-btn" data-tab="analytics"><span class="ni">📊</span><span>統計分析</span></button>
       <button class="tab-btn" data-tab="responses"><span class="ni">📝</span><span>填寫紀錄 <span id="unread-badge" class="unread-badge" hidden></span></span></button>
       <button class="tab-btn" data-tab="invite"><span class="ni">📧</span><span>發送邀請</span></button>
+      <button class="tab-btn" data-tab="docs"><span class="ni">📖</span><span>系統說明</span></button>
 
       <div class="nav-divider admin-only-tab" hidden></div>
       <div class="nav-group-label admin-only-tab" hidden>管理員專區</div>
@@ -173,6 +174,17 @@ https://www.taipeinewhorizon.com.tw/venues</textarea>
           <span id="resp-page-info"></span>
           <button type="button" id="resp-next" class="btn btn-secondary">下一頁</button>
         </div>
+      </div>
+    </div>
+
+    <!-- 系統說明 -->
+    <div class="tab-panel" id="tab-docs">
+      <div class="page-header">
+        <h1>系統說明文件</h1>
+        <p class="hint">本頁即時顯示系統架構、問卷題目結構與操作說明，題目異動後自動同步。</p>
+      </div>
+      <div class="panel" style="padding:0;overflow:hidden;border-radius:var(--radius)">
+        <iframe src="/docs" style="width:100%;height:calc(100vh - 200px);border:none;display:block;"></iframe>
       </div>
     </div>
 

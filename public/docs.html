@@ -207,6 +207,17 @@ body {
 </style>
 </head>
 <body>
+<script>
+// 若在 iframe 內嵌入後台，隱藏 header 和返回按鈕
+if (window.self !== window.top) {
+  document.addEventListener('DOMContentLoaded', function() {
+    const h = document.querySelector('.doc-header');
+    const b = document.querySelector('.back-btn');
+    if (h) h.style.display = 'none';
+    if (b) b.style.display = 'none';
+  });
+}
+</script>
 
 <div class="doc-header">
   <img src="/logo.jpg" alt="臺北文創 Taipei New Horizon">
