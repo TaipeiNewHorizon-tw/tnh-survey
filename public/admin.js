@@ -903,23 +903,44 @@ const inviteSubjectEl = document.getElementById("invite-subject");
 const inviteMessageEl = document.getElementById("invite-message");
 const inviteResultEl = document.getElementById("invite-result");
 
-inviteSendBtn.addEventListener("click", () => {
+inviteSendBtn.addEventListener("click", async () => {
   const to = inviteEmailsEl.value.trim();
   if (!to) { alert("請輸入收件人 Email。"); return; }
 
+  const emails = to.split(/[\n,;]+/).map(e => e.trim()).filter(Boolean);
   const subject = inviteSubjectEl.value.trim() || "邀請您填寫臺北文創場地體驗滿意度問卷";
-  const body = inviteMessageEl.value.trim() || "";
+  const message = inviteMessageEl.value.trim() || "";
 
-  // 用 mailto: 開啟使用者的預設信箱
-  const mailtoUrl = "mailto:" + encodeURIComponent(to)
-    + "?subject=" + encodeURIComponent(subject)
-    + "&body=" + encodeURIComponent(body);
+  inviteSendBtn.disabled = true;
+  inviteSendBtn.textContent = "發送中...";
+  inviteResultEl.hidden = true;
 
-  window.location.href = mailtoUrl;
+  try {
+    const res = await fetch("/api/admin/send-invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emails, subject, message }),
+    });
+    const data = await res.json();
 
-  inviteResultEl.className = "success";
-  inviteResultEl.textContent = "✅ 已開啟您的信箱，請確認內容後按送出。";
-  inviteResultEl.hidden = false;
+    if (!res.ok) {
+      inviteResultEl.className = "error-box";
+      inviteResultEl.textContent = "❌ " + (data.error || "發送失敗");
+    } else {
+      const errMsg = data.errors?.length
+        ? `（${data.errors.length} 個地址失敗：${data.errors.map(e => e.email).join("、")}）`
+        : "";
+      inviteResultEl.className = "success";
+      inviteResultEl.textContent = `✅ 已成功發送 ${data.sent} / ${data.total} 封邀請信。${errMsg}`;
+    }
+  } catch (e) {
+    inviteResultEl.className = "error-box";
+    inviteResultEl.textContent = "❌ 網路錯誤，請稍後再試。";
+  } finally {
+    inviteSendBtn.disabled = false;
+    inviteSendBtn.textContent = "📨 發送邀請信";
+    inviteResultEl.hidden = false;
+  }
 });
 
 // ---------- 啟動 ----------
