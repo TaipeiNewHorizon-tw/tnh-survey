@@ -14,6 +14,13 @@
     <img src="/logo.jpg" alt="臺北文創 Taipei New Horizon" class="brand-logo">
     <span class="brand-desc">場地體驗滿意度問卷系統</span>
   </div>
+  <div class="top-bar-center" id="top-bar-center">
+    <span class="wc-item wc-city"><span class="ni">📍</span><span id="wc-city">定位中…</span></span>
+    <span class="wc-sep"></span>
+    <span class="wc-item wc-datetime" id="wc-datetime">--</span>
+    <span class="wc-sep"></span>
+    <span class="wc-item wc-weather" id="wc-weather">天氣載入中…</span>
+  </div>
   <div class="top-bar-right">
     <div class="user-chip">
       <div class="user-online-dot"></div>
@@ -97,6 +104,45 @@
 
           <label class="checkbox-row"><input type="checkbox" id="q-required" checked> 必填</label>
           <label class="checkbox-row"><input type="checkbox" id="q-active" checked> 上架中（顯示給填寫者）</label>
+
+          <div class="i18n-section">
+            <h2 class="sub-heading i18n-heading">🌐 多語言翻譯（選填）</h2>
+            <p class="hint">填寫後，切換到英文／日文版問卷的填寫者會看到這裡的翻譯內容；留空則自動顯示中文原文。選項請維持與上方中文選項「相同數量、相同順序」，每行一個。</p>
+
+            <div class="i18n-lang-block">
+              <h3 class="i18n-lang-title">English</h3>
+              <label for="q-text-en">Question</label>
+              <input type="text" id="q-text-en">
+
+              <label for="q-section-en">Section</label>
+              <input type="text" id="q-section-en">
+
+              <div id="options-field-en" hidden>
+                <label for="q-options-en">Options（每行一個）</label>
+                <textarea id="q-options-en" rows="4"></textarea>
+              </div>
+
+              <label for="q-suggestion-label-en">額外欄位標籤（英文）</label>
+              <input type="text" id="q-suggestion-label-en">
+            </div>
+
+            <div class="i18n-lang-block">
+              <h3 class="i18n-lang-title">日本語</h3>
+              <label for="q-text-ja">質問文</label>
+              <input type="text" id="q-text-ja">
+
+              <label for="q-section-ja">分類</label>
+              <input type="text" id="q-section-ja">
+
+              <div id="options-field-ja" hidden>
+                <label for="q-options-ja">選択肢（1行に1つ）</label>
+                <textarea id="q-options-ja" rows="4"></textarea>
+              </div>
+
+              <label for="q-suggestion-label-ja">追加欄のラベル（日本語）</label>
+              <input type="text" id="q-suggestion-label-ja">
+            </div>
+          </div>
 
           <div class="btn-row">
             <button type="submit" class="btn btn-primary">儲存</button>
