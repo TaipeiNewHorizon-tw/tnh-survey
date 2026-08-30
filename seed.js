@@ -3,6 +3,7 @@
 // 只有在 questions 資料表是空的時候才會寫入，避免覆蓋 admin 後台已編輯的內容。
 
 const db = require("./db");
+const { lookupTranslation } = require("./translations-data");
 
 const LIKERT5 = ["非常滿意", "滿意", "普通", "不滿意", "非常不滿意"];
 
@@ -109,9 +110,16 @@ const insert = db.prepare(`
     (@order_index, @section, @question_text, @type, @options, @has_suggestion, @suggestion_label, @required, 1)
 `);
 
+const insertTr = db.prepare(`
+  INSERT INTO question_translations (question_id, lang, question_text, section, options, suggestion_label)
+  VALUES (@question_id, @lang, @question_text, @section, @options, @suggestion_label)
+`);
+
+let trCount = 0;
+
 db.withTransaction(() => {
   questions.forEach((q, i) => {
-    insert.run({
+    const info = insert.run({
       order_index: i + 1,
       section: q.section,
       question_text: q.question_text,
@@ -121,7 +129,23 @@ db.withTransaction(() => {
       suggestion_label: q.suggestion_label || "建議",
       required: q.required ?? 1,
     });
+
+    // 內建的英文／日文翻譯草稿（見 translations-data.js），找得到就一併寫入
+    const tr = lookupTranslation(q);
+    if (tr) {
+      for (const lang of Object.keys(tr)) {
+        insertTr.run({
+          question_id: info.lastInsertRowid,
+          lang,
+          question_text: tr[lang].question_text || "",
+          section: tr[lang].section || "",
+          options: tr[lang].options ? JSON.stringify(tr[lang].options) : null,
+          suggestion_label: tr[lang].suggestion_label || "",
+        });
+        trCount++;
+      }
+    }
   });
 });
 
-console.log(`已寫入 ${questions.length} 題到資料庫。`);
+console.log(`已寫入 ${questions.length} 題到資料庫，並附上 ${trCount} 筆英日文翻譯草稿。`);

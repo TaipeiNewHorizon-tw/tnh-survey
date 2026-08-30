@@ -6,6 +6,7 @@
 //   question_id 欄位會變為 NULL，不影響 CSV 匯出與填寫紀錄查閱。
 
 const db = require("./db");
+const { lookupTranslation } = require("./translations-data");
 
 const LIKERT5 = ["非常滿意", "滿意", "普通", "不滿意", "非常不滿意"];
 
@@ -105,11 +106,18 @@ const insert = db.prepare(`
     (@order_index, @section, @question_text, @type, @options, @has_suggestion, @suggestion_label, @required, 1)
 `);
 
+const insertTr = db.prepare(`
+  INSERT INTO question_translations (question_id, lang, question_text, section, options, suggestion_label)
+  VALUES (@question_id, @lang, @question_text, @section, @options, @suggestion_label)
+`);
+
+let trCount = 0;
+
 db.withTransaction(() => {
-  db.exec("DELETE FROM questions");
+  db.exec("DELETE FROM questions"); // FK ON DELETE CASCADE 會一併清掉舊的 question_translations
   db.exec("DELETE FROM sqlite_sequence WHERE name='questions'");
   questions.forEach((q, i) => {
-    insert.run({
+    const info = insert.run({
       order_index: i + 1,
       section: q.section,
       question_text: q.question_text,
@@ -119,7 +127,23 @@ db.withTransaction(() => {
       suggestion_label: q.suggestion_label || "建議",
       required: q.required ?? 1,
     });
+
+    // 內建的英文／日文翻譯草稿（見 translations-data.js），找得到就一併寫入
+    const tr = lookupTranslation(q);
+    if (tr) {
+      for (const lang of Object.keys(tr)) {
+        insertTr.run({
+          question_id: info.lastInsertRowid,
+          lang,
+          question_text: tr[lang].question_text || "",
+          section: tr[lang].section || "",
+          options: tr[lang].options ? JSON.stringify(tr[lang].options) : null,
+          suggestion_label: tr[lang].suggestion_label || "",
+        });
+        trCount++;
+      }
+    }
   });
 });
 
-console.log(`已清除舊題目，重新寫入 ${questions.length} 題。`);
+console.log(`已清除舊題目，重新寫入 ${questions.length} 題，並附上 ${trCount} 筆英日文翻譯草稿。`);

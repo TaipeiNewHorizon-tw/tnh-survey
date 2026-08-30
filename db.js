@@ -55,6 +55,24 @@ CREATE INDEX IF NOT EXISTS idx_answers_response ON answers(response_id);
 CREATE INDEX IF NOT EXISTS idx_questions_order ON questions(order_index);
 `);
 
+// 多語言翻譯表：題目文字／分類／選項／額外欄位標籤的英文、日文翻譯。
+// 每一題、每個語言一筆，找不到翻譯時（尚未填寫）就 fallback 回中文原文（見 server.js）。
+db.exec(`
+CREATE TABLE IF NOT EXISTS question_translations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+  lang TEXT NOT NULL,                          -- 'en' | 'ja'
+  question_text TEXT,
+  section TEXT,
+  options TEXT,                                 -- JSON 陣列字串，翻譯後的選項文字，順序需與原題 options 一一對應
+  suggestion_label TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(question_id, lang)
+);
+
+CREATE INDEX IF NOT EXISTS idx_question_translations_qid ON question_translations(question_id);
+`);
+
 // 帳號、操作紀錄、設定資料表
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
@@ -88,6 +106,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at DESC);
 
 // 既有資料庫的欄位遷移（新欄位若已存在會拋錯，catch 後忽略）
 try { db.exec("ALTER TABLE responses ADD COLUMN source TEXT"); } catch (_) {}
+try { db.exec("ALTER TABLE responses ADD COLUMN lang TEXT"); } catch (_) {} // 填寫問卷當下使用的語言：'zh' | 'en' | 'ja'
 
 // node:sqlite 沒有像 better-sqlite3 的 db.transaction(fn) 語法糖，
 // 用這個小工具手動包 BEGIN/COMMIT/ROLLBACK，失敗時自動回滾。
