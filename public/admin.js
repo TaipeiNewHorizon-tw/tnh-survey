@@ -27,6 +27,111 @@ async function initAdmin() {
   loadQuestions();
   checkUnread();
   setInterval(checkUnread, 60_000);
+  initWeatherClock();
+}
+
+// ---------- 頂部：所在城市 / 日期時間 / 天氣（自動偵測，無需設定） ----------
+
+// WMO 天氣代碼對照（Open-Meteo 採用），對應圖示與中文說明
+const WEATHER_CODE_MAP = {
+  0: ["☀️", "晴朗"], 1: ["🌤️", "晴時多雲"], 2: ["⛅", "多雲"], 3: ["☁️", "陰天"],
+  45: ["🌫️", "起霧"], 48: ["🌫️", "霧淞"],
+  51: ["🌦️", "毛毛雨"], 53: ["🌦️", "毛毛雨"], 55: ["🌦️", "毛毛雨"],
+  56: ["🌧️", "凍雨"], 57: ["🌧️", "凍雨"],
+  61: ["🌧️", "小雨"], 63: ["🌧️", "中雨"], 65: ["🌧️", "大雨"],
+  66: ["🌧️", "凍雨"], 67: ["🌧️", "凍雨"],
+  71: ["🌨️", "小雪"], 73: ["🌨️", "中雪"], 75: ["🌨️", "大雪"], 77: ["🌨️", "雪粒"],
+  80: ["🌦️", "陣雨"], 81: ["🌦️", "陣雨"], 82: ["⛈️", "強陣雨"],
+  85: ["🌨️", "陣雪"], 86: ["🌨️", "陣雪"],
+  95: ["⛈️", "雷雨"], 96: ["⛈️", "雷雨挾冰雹"], 99: ["⛈️", "雷雨挾冰雹"],
+};
+
+// 定位失敗時的預設地點（臺北文創所在地）
+const WC_FALLBACK_LOCATION = { lat: 25.0478, lon: 121.5319, city: "台北市" };
+
+function wcUpdateClock() {
+  const el = document.getElementById("wc-datetime");
+  if (!el) return;
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("zh-TW", { month: "long", day: "numeric", weekday: "short" });
+  const timeStr = now.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false });
+  el.textContent = `${dateStr}　${timeStr}`;
+}
+
+// 用瀏覽器定位取得經緯度（使用者若拒絕授權或逾時則回傳 null，改用 IP 定位備援）
+function wcGetBrowserLocation() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      () => resolve(null),
+      { timeout: 5000, maximumAge: 10 * 60 * 1000 }
+    );
+  });
+}
+
+// 由經緯度反查城市中文名稱
+async function wcReverseGeocodeCity(lat, lon) {
+  try {
+    const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=zh`);
+    if (!res.ok) throw new Error("reverse geocode failed");
+    const data = await res.json();
+    return data.city || data.locality || data.principalSubdivision || WC_FALLBACK_LOCATION.city;
+  } catch {
+    return WC_FALLBACK_LOCATION.city;
+  }
+}
+
+// 定位授權被拒絕時，改用 IP 概略定位
+async function wcIpFallbackLocation() {
+  try {
+    const res = await fetch("https://ipwho.is/");
+    if (!res.ok) throw new Error("ip lookup failed");
+    const data = await res.json();
+    if (data && data.success !== false && data.latitude && data.longitude) {
+      return { lat: data.latitude, lon: data.longitude, city: data.city || WC_FALLBACK_LOCATION.city };
+    }
+  } catch {}
+  return WC_FALLBACK_LOCATION;
+}
+
+async function wcLoadWeather(lat, lon) {
+  const el = document.getElementById("wc-weather");
+  if (!el) return;
+  try {
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`);
+    if (!res.ok) throw new Error("weather fetch failed");
+    const data = await res.json();
+    const code = data.current && data.current.weather_code;
+    const temp = data.current && data.current.temperature_2m;
+    const [icon, label] = WEATHER_CODE_MAP[code] || ["🌡️", "天氣"];
+    el.textContent = temp === undefined ? `${icon} ${label}` : `${icon} ${Math.round(temp)}°C ${label}`;
+  } catch {
+    el.textContent = "天氣資訊暫時無法取得";
+  }
+}
+
+async function initWeatherClock() {
+  wcUpdateClock();
+  setInterval(wcUpdateClock, 30_000);
+
+  const cityEl = document.getElementById("wc-city");
+
+  let loc = await wcGetBrowserLocation();
+  let city;
+
+  if (loc) {
+    city = await wcReverseGeocodeCity(loc.lat, loc.lon);
+  } else {
+    const fallback = await wcIpFallbackLocation();
+    loc = { lat: fallback.lat, lon: fallback.lon };
+    city = fallback.city;
+  }
+
+  if (cityEl) cityEl.textContent = city || WC_FALLBACK_LOCATION.city;
+
+  wcLoadWeather(loc.lat, loc.lon);
+  setInterval(() => wcLoadWeather(loc.lat, loc.lon), 20 * 60 * 1000);
 }
 
 // 登出
@@ -42,6 +147,10 @@ const typeSelect = document.getElementById("q-type");
 const optionsField = document.getElementById("options-field");
 const cancelBtn = document.getElementById("cancel-edit");
 const responseSummaryEl = document.getElementById("response-summary");
+
+// 多語言翻譯（英文／日文）欄位——後台介面本身維持中文，這裡只是讓工作人員填寫「填寫頁面」要顯示的翻譯內容
+const I18N_LANGS = ["en", "ja"];
+const i18nOptionsField = { en: document.getElementById("options-field-en"), ja: document.getElementById("options-field-ja") };
 
 // ---------- 未讀徽章 ----------
 
@@ -146,6 +255,7 @@ function needsOptions(type) {
 
 typeSelect.addEventListener("change", () => {
   optionsField.hidden = !needsOptions(typeSelect.value);
+  I18N_LANGS.forEach((lang) => { i18nOptionsField[lang].hidden = !needsOptions(typeSelect.value); });
 });
 
 async function loadQuestions() {
@@ -160,12 +270,16 @@ function renderList() {
     const row = document.createElement("div");
     row.className = "q-row" + (q.active ? "" : " inactive");
 
+    const ts = q.translations_status || { en: false, ja: false };
     const meta = document.createElement("div");
     meta.className = "q-meta";
     meta.innerHTML = `
       ${q.section ? `<span class="q-section-tag">${escapeHtml(q.section)}</span>` : ""}
       <div class="q-text">${escapeHtml(q.question_text)}</div>
-      <div class="q-sub">類型：${typeLabel(q.type)}　${q.required ? "必填" : "選填"}　${q.active ? "上架中" : "已下架"}</div>
+      <div class="q-sub">類型：${typeLabel(q.type)}　${q.required ? "必填" : "選填"}　${q.active ? "上架中" : "已下架"}
+        <span class="q-i18n-badge ${ts.en ? "done" : "missing"}">EN${ts.en ? "✓" : "–"}</span>
+        <span class="q-i18n-badge ${ts.ja ? "done" : "missing"}">JA${ts.ja ? "✓" : "–"}</span>
+      </div>
     `;
     row.appendChild(meta);
 
@@ -222,6 +336,33 @@ async function moveQuestion(idx, direction) {
   await loadQuestions();
 }
 
+function clearI18nFields() {
+  I18N_LANGS.forEach((lang) => {
+    document.getElementById(`q-text-${lang}`).value = "";
+    document.getElementById(`q-section-${lang}`).value = "";
+    document.getElementById(`q-options-${lang}`).value = "";
+    document.getElementById(`q-suggestion-label-${lang}`).value = "";
+  });
+}
+
+async function loadI18nFields(questionId) {
+  clearI18nFields();
+  try {
+    const res = await fetch(`/api/admin/questions/${questionId}/translations`);
+    if (!res.ok) return;
+    const data = await res.json();
+    I18N_LANGS.forEach((lang) => {
+      const tr = data[lang] || {};
+      document.getElementById(`q-text-${lang}`).value = tr.question_text || "";
+      document.getElementById(`q-section-${lang}`).value = tr.section || "";
+      document.getElementById(`q-options-${lang}`).value = (tr.options || []).join("\n");
+      document.getElementById(`q-suggestion-label-${lang}`).value = tr.suggestion_label || "";
+    });
+  } catch (_) {
+    // 讀取翻譯失敗不影響基本欄位的編輯，留空即可
+  }
+}
+
 function startEdit(q) {
   formTitle.textContent = `編輯題目 #${q.id}`;
   document.getElementById("q-id").value = q.id;
@@ -234,7 +375,9 @@ function startEdit(q) {
   document.getElementById("q-required").checked = q.required;
   document.getElementById("q-active").checked = q.active;
   optionsField.hidden = !needsOptions(q.type);
+  I18N_LANGS.forEach((lang) => { i18nOptionsField[lang].hidden = !needsOptions(q.type); });
   cancelBtn.hidden = false;
+  loadI18nFields(q.id);
   switchTab("add");
 }
 
@@ -245,6 +388,8 @@ function resetForm() {
   document.getElementById("q-required").checked = true;
   document.getElementById("q-active").checked = true;
   optionsField.hidden = true;
+  I18N_LANGS.forEach((lang) => { i18nOptionsField[lang].hidden = true; });
+  clearI18nFields();
   cancelBtn.hidden = true;
 }
 
@@ -284,6 +429,23 @@ formEl.addEventListener("submit", async (e) => {
     active: document.getElementById("q-active").checked,
   };
 
+  // 選項數量檢查：翻譯的選項數量若與中文選項不一致，填寫頁面會直接 fallback 顯示中文，
+  // 先跟工作人員確認一下，避免誤以為已經翻譯成功
+  if (needsOptions(type) && payload.options.length > 0) {
+    for (const lang of I18N_LANGS) {
+      const raw = document.getElementById(`q-options-${lang}`).value.trim();
+      if (!raw) continue;
+      const count = raw.split("\n").map((s) => s.trim()).filter(Boolean).length;
+      if (count !== payload.options.length) {
+        const langName = lang === "en" ? "English" : "日本語";
+        const ok = confirm(
+          `${langName} 選項數量（${count}）與中文選項數量（${payload.options.length}）不一致，儲存後該語言會自動改顯示中文選項。要繼續儲存嗎？`
+        );
+        if (!ok) return;
+      }
+    }
+  }
+
   const url = id ? `/api/admin/questions/${id}` : "/api/admin/questions";
   const method = id ? "PUT" : "POST";
 
@@ -298,6 +460,29 @@ formEl.addEventListener("submit", async (e) => {
     alert("儲存失敗：" + (data.error || "未知錯誤"));
     return;
   }
+
+  const saved = await res.json();
+  const questionId = saved.id;
+
+  // 一併儲存英文／日文翻譯（留空欄位就存空字串，代表「顯示中文原文」）
+  await Promise.all(
+    I18N_LANGS.map((lang) => {
+      const optionsRaw = document.getElementById(`q-options-${lang}`).value;
+      const trPayload = {
+        question_text: document.getElementById(`q-text-${lang}`).value.trim(),
+        section: document.getElementById(`q-section-${lang}`).value.trim(),
+        options: needsOptions(type)
+          ? optionsRaw.split("\n").map((s) => s.trim()).filter(Boolean)
+          : [],
+        suggestion_label: document.getElementById(`q-suggestion-label-${lang}`).value.trim(),
+      };
+      return fetch(`/api/admin/questions/${questionId}/translations/${lang}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(trPayload),
+      });
+    })
+  );
 
   resetForm();
   await loadQuestions();
