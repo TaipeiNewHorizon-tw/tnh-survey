@@ -13,7 +13,7 @@
 //   GET  /api/admin/responses       後台：分頁取得填寫結果（?limit=&offset=，逐筆查詢用）
 //   GET  /api/admin/analytics       後台：統計分析（五等量表平均分數排名、單選/多選分布）
 //   GET  /api/admin/responses.csv   後台：匯出 CSV（可直接用 Excel 開啟分析）
-
+ 
 require("dotenv").config();
 const path = require("path");
 const express = require("express");
@@ -21,16 +21,16 @@ const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const { Resend } = require("resend");
 const db = require("./db");
-
+ 
 // ---------- 電子郵件通知 ----------
-
+ 
 const emailEnabled = !!(process.env.RESEND_API_KEY && process.env.NOTIFY_EMAIL_TO);
-
+ 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-
+ 
 function sendResponseNotification(responseId, answers) {
   if (!resend) return;
-
+ 
   // 取出基本資料欄位作為郵件摘要
   const get = (label) => {
     const a = answers.find((x) =>
@@ -38,17 +38,17 @@ function sendResponseNotification(responseId, answers) {
     );
     return a && a.answer_value ? a.answer_value : "（未填）";
   };
-
+ 
   const activityName = get("活動名稱");
   const floor       = get("樓層");
   const date        = get("活動日期");
   const name        = get("姓名");
   const email       = get("E-MAIL");
   const identity    = get("身分");
-
+ 
   const adminUrl = `https://tnh-customet-survey-production.up.railway.app/admin`;
   const now = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
-
+ 
   const html = `
     <div style="font-family:sans-serif;max-width:520px;margin:auto;border:1px solid #eee;border-radius:8px;overflow:hidden;">
       <div style="background:#007AFF;color:#fff;padding:16px 20px;">
@@ -70,7 +70,7 @@ function sendResponseNotification(responseId, answers) {
       </div>
     </div>
   `;
-
+ 
   const notifyTo = process.env.NOTIFY_EMAIL_TO.split(",").map((s) => s.trim()).filter(Boolean);
   resend.emails.send({
     from: process.env.NOTIFY_EMAIL_FROM || "onboarding@resend.dev",
@@ -79,22 +79,22 @@ function sendResponseNotification(responseId, answers) {
     html,
   }).catch((err) => console.error("通知信寄送失敗：", err.message));
 }
-
+ 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
+ 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
-
+ 
 app.use(session({
   secret: process.env.SESSION_SECRET || "tnh-survey-2024-secret",
   resave: false,
   saveUninitialized: false,
   cookie: { maxAge: 24 * 60 * 60 * 1000 }, // 24 小時
 }));
-
+ 
 // ---------- 認證中介層 ----------
-
+ 
 function requireAuth(req, res, next) {
   if (!req.session.user) {
     if (req.path.startsWith("/api/")) return res.status(401).json({ error: "請先登入" });
@@ -102,16 +102,16 @@ function requireAuth(req, res, next) {
   }
   next();
 }
-
+ 
 function requireAdmin(req, res, next) {
   if (!req.session.user || req.session.user.role !== "admin") {
     return res.status(403).json({ error: "需要管理員權限" });
   }
   next();
 }
-
+ 
 // ---------- 操作紀錄 ----------
-
+ 
 function auditLog(req, action, target, details) {
   const u = req.session && req.session.user ? req.session.user : { id: null, username: "系統" };
   try {
@@ -120,26 +120,57 @@ function auditLog(req, action, target, details) {
     );
   } catch (_) {}
 }
-
+ 
 // ---------- 共用工具 ----------
-
-function serializeQuestion(row) {
+ 
+// 支援的填寫頁語言（後台管理介面本身維持中文，不受此限制）
+const SUPPORTED_LANGS = ["en", "ja"];
+const ALL_LANGS = ["zh", ...SUPPORTED_LANGS];
+ 
+// tr 為該題在指定語言的翻譯列（question_translations 的一筆），可能是 undefined（尚未翻譯）。
+// 顯示文字（question_text / section / suggestion_label）有翻譯就用翻譯，沒有就 fallback 回中文原文。
+// options 則分兩份回傳：
+//   options         → 永遠是中文原文，作為表單送出的實際值，確保統計分析與語言版本無關、可互相加總比較
+//   options_display → 依語言顯示用的選項文字（陣列長度需與 options 一致才會採用，否則同樣 fallback 回中文）
+function serializeQuestion(row, tr) {
+  const canonicalOptions = row.options ? JSON.parse(row.options) : null;
+  let displayOptions = canonicalOptions;
+  if (tr && tr.options) {
+    try {
+      const parsed = JSON.parse(tr.options);
+      if (Array.isArray(parsed) && canonicalOptions && parsed.length === canonicalOptions.length) {
+        displayOptions = parsed;
+      }
+    } catch (_) {}
+  }
   return {
     id: row.id,
     order_index: row.order_index,
-    section: row.section,
-    question_text: row.question_text,
+    section: (tr && tr.section) || row.section,
+    question_text: (tr && tr.question_text) || row.question_text,
     type: row.type,
-    options: row.options ? JSON.parse(row.options) : null,
+    options: canonicalOptions,
+    options_display: displayOptions,
     has_suggestion: !!row.has_suggestion,
-    suggestion_label: row.suggestion_label,
+    suggestion_label: (tr && tr.suggestion_label) || row.suggestion_label,
     required: !!row.required,
     active: !!row.active,
   };
 }
-
+ 
+function getTranslationMap(questionIds, lang) {
+  const map = new Map();
+  if (!lang || !SUPPORTED_LANGS.includes(lang) || questionIds.length === 0) return map;
+  const placeholders = questionIds.map(() => "?").join(",");
+  const rows = db
+    .prepare(`SELECT * FROM question_translations WHERE lang = ? AND question_id IN (${placeholders})`)
+    .all(lang, ...questionIds);
+  for (const r of rows) map.set(r.question_id, r);
+  return map;
+}
+ 
 const VALID_TYPES = ["shorttext", "longtext", "date", "likert5", "choice", "multichoice"];
-
+ 
 function validateQuestionPayload(body) {
   if (!body.question_text || !String(body.question_text).trim()) {
     return "question_text 不能為空";
@@ -154,53 +185,66 @@ function validateQuestionPayload(body) {
   }
   return null;
 }
-
+ 
 // ---------- 公開 API：填寫頁面 ----------
-
+ 
 app.get("/api/questions", (req, res) => {
+  const lang = SUPPORTED_LANGS.includes(req.query.lang) ? req.query.lang : null;
   const rows = db
     .prepare("SELECT * FROM questions WHERE active = 1 ORDER BY order_index ASC, id ASC")
     .all();
-  res.json(rows.map(serializeQuestion));
+  const trMap = getTranslationMap(rows.map((r) => r.id), lang);
+  res.json(rows.map((r) => serializeQuestion(r, trMap.get(r.id))));
 });
-
+ 
 app.post("/api/responses", (req, res) => {
   const { answers, source } = req.body;
-
+  const lang = ALL_LANGS.includes(req.body.lang) ? req.body.lang : "zh";
+ 
   if (!Array.isArray(answers) || answers.length === 0) {
-    return res.status(400).json({ error: "answers 不能為空" });
+    const msg = { zh: "answers 不能為空", en: "answers must not be empty", ja: "answers は空にできません" }[lang];
+    return res.status(400).json({ error: msg });
   }
-
+ 
   const activeQuestions = db
     .prepare("SELECT * FROM questions WHERE active = 1")
     .all();
   const questionMap = new Map(activeQuestions.map((q) => [q.id, q]));
-
-  // 檢查必填題目是否都有回答
+  const trMap = getTranslationMap(activeQuestions.map((q) => q.id), lang);
+ 
+  // 檢查必填題目是否都有回答（錯誤訊息依填寫語言顯示翻譯後的題目名稱，沒有翻譯則 fallback 回中文）
   for (const q of activeQuestions) {
     if (!q.required) continue;
     const a = answers.find((x) => x.question_id === q.id);
     if (!a || a.answer_value === undefined || a.answer_value === null || String(a.answer_value).trim() === "") {
-      return res.status(400).json({ error: `題目「${q.question_text}」為必填` });
+      const tr = trMap.get(q.id);
+      const label = (tr && tr.question_text) || q.question_text;
+      const missingMsg = {
+        zh: `題目「${label}」為必填`,
+        en: `"${label}" is required`,
+        ja: `「${label}」は必須項目です`,
+      }[lang];
+      return res.status(400).json({ error: missingMsg });
     }
   }
-
+ 
   const insertResponse = db.prepare(
-    "INSERT INTO responses (user_agent, source) VALUES (?, ?)"
+    "INSERT INTO responses (user_agent, source, lang) VALUES (?, ?, ?)"
   );
   const insertAnswer = db.prepare(`
     INSERT INTO answers
       (response_id, question_id, question_text_snapshot, section_snapshot, question_type_snapshot, answer_value, suggestion_text)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
-
+ 
   try {
     const responseId = db.withTransaction(() => {
       const { lastInsertRowid } = insertResponse.run(
         req.headers["user-agent"] || null,
-        source || null
+        source || null,
+        lang
       );
-
+ 
       for (const a of answers) {
         const q = questionMap.get(a.question_id);
         if (!q) continue; // 忽略不存在或已下架的題目 id，避免被偽造資料污染
@@ -218,28 +262,29 @@ app.post("/api/responses", (req, res) => {
       }
       return lastInsertRowid;
     });
-
+ 
     // 非同步寄送通知信（不阻擋回應）
     const savedAnswers = answers.map((a) => {
       const q = questionMap.get(a.question_id);
       return q ? { question_text_snapshot: q.question_text, answer_value: a.answer_value } : null;
     }).filter(Boolean);
     sendResponseNotification(responseId, savedAnswers);
-
+ 
     res.status(201).json({ ok: true, response_id: responseId });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "伺服器錯誤，請稍後再試" });
+    const msg = { zh: "伺服器錯誤，請稍後再試", en: "Server error, please try again later", ja: "サーバーエラーが発生しました。しばらくしてから再度お試しください" }[lang];
+    res.status(500).json({ error: msg });
   }
 });
-
+ 
 // ---------- 登入 / 登出 ----------
-
+ 
 app.get("/login", (req, res) => {
   if (req.session.user) return res.redirect("/admin");
   res.sendFile(path.join(__dirname, "views", "login.html"));
 });
-
+ 
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: "請輸入帳號與密碼" });
@@ -251,32 +296,32 @@ app.post("/api/login", (req, res) => {
   auditLog(req, "LOGIN", null, null);
   res.json({ ok: true, user: req.session.user });
 });
-
+ 
 app.post("/api/logout", (req, res) => {
   auditLog(req, "LOGOUT", null, null);
   req.session.destroy(() => res.json({ ok: true }));
 });
-
+ 
 // ---------- 後台管理（Session 保護） ----------
-
+ 
 app.get("/admin", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "views", "admin.html"));
 });
-
+ 
 // 所有 /api/admin/* 都需要登入
 app.use("/api/admin", requireAuth);
-
+ 
 app.get("/api/admin/me", (req, res) => {
   res.json(req.session.user);
 });
-
+ 
 // ---------- 帳號管理（管理員專用） ----------
-
+ 
 app.get("/api/admin/users", requireAdmin, (req, res) => {
   const users = db.prepare("SELECT id, username, display_name, role, active, created_at FROM users ORDER BY id ASC").all();
   res.json(users);
 });
-
+ 
 app.post("/api/admin/users", requireAdmin, (req, res) => {
   const { username, password, display_name, role } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: "帳號與密碼為必填" });
@@ -288,7 +333,7 @@ app.post("/api/admin/users", requireAdmin, (req, res) => {
   auditLog(req, "ADD_USER", username, `role=${role}`);
   res.status(201).json({ ok: true, id: info.lastInsertRowid });
 });
-
+ 
 app.put("/api/admin/users/:id", requireAdmin, (req, res) => {
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
   if (!user) return res.status(404).json({ error: "找不到此帳號" });
@@ -302,7 +347,7 @@ app.put("/api/admin/users/:id", requireAdmin, (req, res) => {
   auditLog(req, "EDIT_USER", user.username, `role=${newRole}, active=${newActive}${password ? ", 已更新密碼" : ""}`);
   res.json({ ok: true });
 });
-
+ 
 app.delete("/api/admin/users/:id", requireAdmin, (req, res) => {
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
   if (!user) return res.status(404).json({ error: "找不到此帳號" });
@@ -311,9 +356,9 @@ app.delete("/api/admin/users/:id", requireAdmin, (req, res) => {
   auditLog(req, "DELETE_USER", user.username, null);
   res.json({ ok: true });
 });
-
+ 
 // ---------- 刪除密碼設定（管理員專用） ----------
-
+ 
 app.post("/api/admin/settings/delete-password", requireAdmin, (req, res) => {
   const { password } = req.body || {};
   if (!password) return res.status(400).json({ error: "請輸入刪除密碼" });
@@ -322,9 +367,9 @@ app.post("/api/admin/settings/delete-password", requireAdmin, (req, res) => {
   auditLog(req, "CHANGE_DELETE_PASSWORD", null, null);
   res.json({ ok: true });
 });
-
+ 
 // ---------- 操作紀錄（管理員專用） ----------
-
+ 
 app.get("/api/admin/audit-logs", requireAdmin, (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
   const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
@@ -332,24 +377,41 @@ app.get("/api/admin/audit-logs", requireAdmin, (req, res) => {
   const logs = db.prepare("SELECT * FROM audit_logs ORDER BY id DESC LIMIT ? OFFSET ?").all(limit, offset);
   res.json({ total, limit, offset, items: logs });
 });
-
+ 
 app.get("/api/admin/questions", (req, res) => {
   const rows = db.prepare("SELECT * FROM questions ORDER BY order_index ASC, id ASC").all();
-  res.json(rows.map(serializeQuestion));
+ 
+  // 附帶標記每題「英文／日文是否已有翻譯內容」，讓後台題目列表能顯示 EN／JA 狀態
+  const trRows = db.prepare("SELECT question_id, lang FROM question_translations WHERE TRIM(COALESCE(question_text, '')) != ''").all();
+  const trStatus = new Map();
+  for (const t of trRows) {
+    if (!trStatus.has(t.question_id)) trStatus.set(t.question_id, {});
+    trStatus.get(t.question_id)[t.lang] = true;
+  }
+ 
+  res.json(
+    rows.map((r) => ({
+      ...serializeQuestion(r),
+      translations_status: {
+        en: !!(trStatus.get(r.id) && trStatus.get(r.id).en),
+        ja: !!(trStatus.get(r.id) && trStatus.get(r.id).ja),
+      },
+    }))
+  );
 });
-
+ 
 app.post("/api/admin/questions", (req, res) => {
   const err = validateQuestionPayload(req.body);
   if (err) return res.status(400).json({ error: err });
-
+ 
   const maxOrder = db.prepare("SELECT COALESCE(MAX(order_index), 0) AS m FROM questions").get().m;
-
+ 
   const insert = db.prepare(`
     INSERT INTO questions
       (order_index, section, question_text, type, options, has_suggestion, suggestion_label, required, active)
     VALUES (@order_index, @section, @question_text, @type, @options, @has_suggestion, @suggestion_label, @required, @active)
   `);
-
+ 
   const info = insert.run({
     order_index: req.body.order_index ?? maxOrder + 1,
     section: req.body.section || "",
@@ -361,19 +423,19 @@ app.post("/api/admin/questions", (req, res) => {
     required: req.body.required ? 1 : 0,
     active: req.body.active === false ? 0 : 1,
   });
-
+ 
   const row = db.prepare("SELECT * FROM questions WHERE id = ?").get(info.lastInsertRowid);
   res.status(201).json(serializeQuestion(row));
 });
-
+ 
 app.put("/api/admin/questions/:id", (req, res) => {
   const existing = db.prepare("SELECT * FROM questions WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "題目不存在" });
-
+ 
   const merged = { ...existing, ...req.body };
   const err = validateQuestionPayload(merged);
   if (err) return res.status(400).json({ error: err });
-
+ 
   db.prepare(`
     UPDATE questions SET
       order_index = @order_index,
@@ -399,56 +461,114 @@ app.put("/api/admin/questions/:id", (req, res) => {
     required: merged.required ? 1 : 0,
     active: merged.active === false || merged.active === 0 ? 0 : 1,
   });
-
+ 
   const row = db.prepare("SELECT * FROM questions WHERE id = ?").get(existing.id);
   res.json(serializeQuestion(row));
 });
-
+ 
 app.delete("/api/admin/questions/:id", (req, res) => {
   const existing = db.prepare("SELECT * FROM questions WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "題目不存在" });
-
+ 
   const answerCount = db
     .prepare("SELECT COUNT(*) AS n FROM answers WHERE question_id = ?")
     .get(req.params.id).n;
-
+ 
   if (answerCount > 0) {
     // 已經有人填過這題，為了保留歷史資料的完整性，改成「下架」而不是真的刪除
     db.prepare("UPDATE questions SET active = 0, updated_at = datetime('now') WHERE id = ?").run(req.params.id);
     return res.json({ ok: true, mode: "deactivated", reason: "已有填寫紀錄，僅下架不刪除" });
   }
-
+ 
   db.prepare("DELETE FROM questions WHERE id = ?").run(req.params.id);
   res.json({ ok: true, mode: "deleted" });
 });
-
+ 
 app.post("/api/admin/questions/reorder", (req, res) => {
   const { order } = req.body; // [{id, order_index}, ...]
   if (!Array.isArray(order)) return res.status(400).json({ error: "order 必須是陣列" });
-
+ 
   const update = db.prepare("UPDATE questions SET order_index = ?, updated_at = datetime('now') WHERE id = ?");
   db.withTransaction(() => {
     for (const item of order) update.run(item.order_index, item.id);
   });
-
+ 
   res.json({ ok: true });
 });
-
+ 
+// ---------- 多語言翻譯（英文／日文，後台編輯用） ----------
+ 
+app.get("/api/admin/questions/:id/translations", (req, res) => {
+  const q = db.prepare("SELECT id FROM questions WHERE id = ?").get(req.params.id);
+  if (!q) return res.status(404).json({ error: "題目不存在" });
+ 
+  const rows = db
+    .prepare("SELECT lang, question_text, section, options, suggestion_label FROM question_translations WHERE question_id = ?")
+    .all(req.params.id);
+ 
+  const out = {};
+  for (const lang of SUPPORTED_LANGS) {
+    out[lang] = { question_text: "", section: "", options: [], suggestion_label: "" };
+  }
+  for (const r of rows) {
+    if (!SUPPORTED_LANGS.includes(r.lang)) continue;
+    out[r.lang] = {
+      question_text: r.question_text || "",
+      section: r.section || "",
+      options: r.options ? JSON.parse(r.options) : [],
+      suggestion_label: r.suggestion_label || "",
+    };
+  }
+  res.json(out);
+});
+ 
+app.put("/api/admin/questions/:id/translations/:lang", (req, res) => {
+  const lang = req.params.lang;
+  if (!SUPPORTED_LANGS.includes(lang)) {
+    return res.status(400).json({ error: `lang 必須是其中之一：${SUPPORTED_LANGS.join(", ")}` });
+  }
+  const q = db.prepare("SELECT id, question_text FROM questions WHERE id = ?").get(req.params.id);
+  if (!q) return res.status(404).json({ error: "題目不存在" });
+ 
+  const { question_text, section, options, suggestion_label } = req.body || {};
+ 
+  db.prepare(`
+    INSERT INTO question_translations (question_id, lang, question_text, section, options, suggestion_label, updated_at)
+    VALUES (@question_id, @lang, @question_text, @section, @options, @suggestion_label, datetime('now'))
+    ON CONFLICT(question_id, lang) DO UPDATE SET
+      question_text = excluded.question_text,
+      section = excluded.section,
+      options = excluded.options,
+      suggestion_label = excluded.suggestion_label,
+      updated_at = datetime('now')
+  `).run({
+    question_id: q.id,
+    lang,
+    question_text: question_text ? String(question_text).trim() : "",
+    section: section ? String(section).trim() : "",
+    options: Array.isArray(options) ? JSON.stringify(options.map((s) => String(s))) : null,
+    suggestion_label: suggestion_label ? String(suggestion_label).trim() : "",
+  });
+ 
+  auditLog(req, "EDIT_TRANSLATION", `#${q.id} ${q.question_text} (${lang})`, null);
+  res.json({ ok: true });
+});
+ 
 app.get("/api/admin/responses/unread", (req, res) => {
   const since = parseInt(req.query.since, 10) || 0;
   const row = db.prepare("SELECT COUNT(*) AS cnt, MAX(id) AS maxId FROM responses WHERE id > ?").get(since);
   res.json({ count: row.cnt || 0, maxId: row.maxId || since });
 });
-
+ 
 app.get("/api/admin/responses", (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 200);
   const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
-
+ 
   const total = db.prepare("SELECT COUNT(*) AS n FROM responses").get().n;
   const responses = db
     .prepare("SELECT * FROM responses ORDER BY id DESC LIMIT ? OFFSET ?")
     .all(limit, offset);
-
+ 
   let answers = [];
   if (responses.length > 0) {
     const ids = responses.map((r) => r.id);
@@ -457,57 +577,57 @@ app.get("/api/admin/responses", (req, res) => {
       .prepare(`SELECT * FROM answers WHERE response_id IN (${placeholders}) ORDER BY response_id DESC, id ASC`)
       .all(...ids);
   }
-
+ 
   const byResponse = new Map(responses.map((r) => [r.id, { ...r, answers: [] }]));
   for (const a of answers) {
     const r = byResponse.get(a.response_id);
     if (r) r.answers.push(a);
   }
-
+ 
   res.json({ total, limit, offset, items: Array.from(byResponse.values()) });
 });
-
+ 
 app.delete("/api/admin/responses/:id", (req, res) => {
   const pwd = req.headers["x-delete-password"];
   if (!pwd) return res.status(400).json({ error: "請輸入刪除密碼" });
-
+ 
   const setting = db.prepare("SELECT value FROM settings WHERE key = 'delete_password'").get();
   const valid = setting
     ? bcrypt.compareSync(pwd, setting.value)
     : pwd === (process.env.ADMIN_PASSWORD || "changeme");
-
+ 
   if (!valid) return res.status(403).json({ error: "密碼錯誤，無法刪除" });
-
+ 
   const response = db.prepare("SELECT id FROM responses WHERE id = ?").get(req.params.id);
   if (!response) return res.status(404).json({ error: "找不到此筆紀錄" });
   db.prepare("DELETE FROM responses WHERE id = ?").run(req.params.id);
   auditLog(req, "DELETE_RESPONSE", `#${req.params.id}`, null);
   res.json({ ok: true });
 });
-
+ 
 app.get("/api/admin/responses/:id", (req, res) => {
   const response = db.prepare("SELECT * FROM responses WHERE id = ?").get(req.params.id);
   if (!response) return res.status(404).json({ error: "找不到此筆紀錄" });
-
+ 
   const answers = db
     .prepare("SELECT * FROM answers WHERE response_id = ? ORDER BY id ASC")
     .all(req.params.id);
-
+ 
   res.json({ ...response, answers });
 });
-
+ 
 app.get("/api/admin/analytics", (req, res) => {
   const sourceFilter = req.query.source || null; // 'email' | 'qrcode' | null = 全部
   const questions = db.prepare("SELECT * FROM questions ORDER BY order_index ASC, id ASC").all();
   const answers = sourceFilter
     ? db.prepare("SELECT a.* FROM answers a JOIN responses r ON r.id = a.response_id WHERE r.source = ?").all(sourceFilter)
     : db.prepare("SELECT * FROM answers").all();
-
+ 
   // 以 question_id 建立索引（正常情況）
   const answersByQuestionId = new Map();
   // 以 question_text_snapshot 建立索引（question_id 為 NULL 的孤立答案）
   const orphansByText = new Map();
-
+ 
   for (const a of answers) {
     if (a.question_id !== null && a.question_id !== undefined) {
       if (!answersByQuestionId.has(a.question_id)) answersByQuestionId.set(a.question_id, []);
@@ -517,22 +637,22 @@ app.get("/api/admin/analytics", (req, res) => {
       orphansByText.get(a.question_text_snapshot).push(a);
     }
   }
-
+ 
   const likert = [];
   const others = [];
   const opentext = [];
-
+ 
   for (const q of questions) {
     // 合併：有 question_id 對應的答案 + question_id 為 NULL 但題目文字相符的孤立答案
     const byId = answersByQuestionId.get(q.id) || [];
     const byText = orphansByText.get(q.question_text) || [];
     const qAnswers = [...byId, ...byText];
     const options = q.options ? JSON.parse(q.options) : null;
-
+ 
     if (q.type === "likert5" && options) {
       const distribution = {};
       options.forEach((opt) => (distribution[opt] = 0));
-
+ 
       let sum = 0;
       let scored = 0;
       for (const a of qAnswers) {
@@ -542,7 +662,7 @@ app.get("/api/admin/analytics", (req, res) => {
         sum += options.length - idx;
         scored++;
       }
-
+ 
       likert.push({
         question_id: q.id,
         section: q.section,
@@ -556,7 +676,7 @@ app.get("/api/admin/analytics", (req, res) => {
     } else if ((q.type === "choice" || q.type === "multichoice") && options) {
       const distribution = {};
       options.forEach((opt) => (distribution[opt] = 0));
-
+ 
       for (const a of qAnswers) {
         const values =
           q.type === "multichoice"
@@ -566,7 +686,7 @@ app.get("/api/admin/analytics", (req, res) => {
           if (v in distribution) distribution[v]++;
         }
       }
-
+ 
       others.push({
         question_id: q.id,
         section: q.section,
@@ -579,7 +699,7 @@ app.get("/api/admin/analytics", (req, res) => {
       const responses = qAnswers
         .filter((a) => a.answer_value && a.answer_value.trim())
         .map((a) => ({ text: a.answer_value.trim(), response_id: a.response_id }));
-
+ 
       opentext.push({
         question_id: q.id,
         section: q.section,
@@ -590,32 +710,32 @@ app.get("/api/admin/analytics", (req, res) => {
       });
     }
   }
-
+ 
   likert.sort((a, b) => {
     if (a.average === null) return 1;
     if (b.average === null) return -1;
     return b.average - a.average;
   });
-
+ 
   res.json({ likert, others, opentext });
 });
-
+ 
 app.post("/api/admin/send-invite", async (req, res) => {
   if (!resend) {
     return res.status(503).json({ error: "電子郵件功能尚未設定（請在 Railway 環境變數中設定 RESEND_API_KEY 與 NOTIFY_EMAIL_TO）" });
   }
-
+ 
   const { emails, subject, message } = req.body;
   if (!Array.isArray(emails) || emails.length === 0) {
     return res.status(400).json({ error: "請提供至少一個電子郵件地址" });
   }
-
+ 
   const baseUrl = process.env.SURVEY_URL || "https://tnh-customet-survey-production.up.railway.app";
   const surveyUrl = `${baseUrl}/?source=email`;
   const customNote = message
     ? `<p style="margin:14px 0 0;font-size:14px;color:#555;line-height:1.7;padding:10px 14px;background:#f5f5f5;border-radius:6px;">${String(message).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/\n/g,"<br>")}</p>`
     : "";
-
+ 
   const buildHtml = () => `
     <div style="font-family:sans-serif;max-width:540px;margin:auto;border:1px solid #eee;border-radius:8px;overflow:hidden;">
       <div style="background:#1a1a2e;color:#fff;padding:20px 24px;text-align:center;">
@@ -636,7 +756,7 @@ app.post("/api/admin/send-invite", async (req, res) => {
       </div>
     </div>
   `;
-
+ 
   let sent = 0;
   const errors = [];
   for (const email of emails) {
@@ -655,10 +775,10 @@ app.post("/api/admin/send-invite", async (req, res) => {
       errors.push({ email: addr, error: err.message });
     }
   }
-
+ 
   res.json({ ok: true, sent, total: emails.length, errors });
 });
-
+ 
 app.get("/api/admin/responses.csv", (req, res) => {
   const rows = db.prepare(`
     SELECT a.response_id, r.submitted_at, r.source, a.section_snapshot, a.question_text_snapshot,
@@ -667,13 +787,13 @@ app.get("/api/admin/responses.csv", (req, res) => {
     JOIN responses r ON r.id = a.response_id
     ORDER BY a.response_id ASC, a.id ASC
   `).all();
-
+ 
   const escape = (v) => {
     if (v === null || v === undefined) return "";
     const s = String(v).replace(/"/g, '""');
     return /[",\n]/.test(s) ? `"${s}"` : s;
   };
-
+ 
   const header = ["response_id", "submitted_at", "source", "section", "question", "answer", "suggestion"];
   const lines = [header.join(",")];
   for (const row of rows) {
@@ -687,16 +807,16 @@ app.get("/api/admin/responses.csv", (req, res) => {
       escape(row.suggestion_text),
     ].join(","));
   }
-
+ 
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", "attachment; filename=responses.csv");
   res.send("﻿" + lines.join("\n")); // 加 BOM 避免 Excel 開啟中文亂碼
 });
-
+ 
 app.listen(PORT, () => {
   console.log(`問卷伺服器啟動：http://localhost:${PORT}`);
   console.log(`後台管理：http://localhost:${PORT}/admin`);
-
+ 
   // 若尚無任何帳號，從環境變數建立預設管理員
   const userCount = db.prepare("SELECT COUNT(*) AS n FROM users").get().n;
   if (userCount === 0) {
@@ -706,7 +826,7 @@ app.listen(PORT, () => {
     db.prepare("INSERT INTO users (username, password_hash, role, display_name) VALUES (?, ?, 'admin', '系統管理員')").run(adminUser, hash);
     console.log(`[INIT] 已建立預設管理員帳號：${adminUser}`);
   }
-
+ 
   // 若尚未設定刪除密碼，以 ADMIN_PASSWORD 作為預設（雜湊儲存）
   const delPwd = db.prepare("SELECT value FROM settings WHERE key = 'delete_password'").get();
   if (!delPwd) {
@@ -715,4 +835,40 @@ app.listen(PORT, () => {
     db.prepare("INSERT INTO settings (key, value) VALUES ('delete_password', ?)").run(hash);
     console.log("[INIT] 已設定預設刪除密碼（與管理員密碼相同）");
   }
+ 
+  // 若 question_translations 資料表完全是空的（表示這是加入多語言功能後第一次啟動），
+  // 自動比對現有題目、寫入內建的英日文翻譯草稿（見 translations-data.js）——
+  // 只在「完全沒有任何翻譯資料」時才會執行一次，之後在後台編輯過的翻譯內容不會被這裡覆蓋，
+  // 所以部署上線後不需要額外手動執行 seed-translations.js。
+  const trCount = db.prepare("SELECT COUNT(*) AS n FROM question_translations").get().n;
+  if (trCount === 0) {
+    const { lookupTranslation } = require("./translations-data");
+    const allQuestions = db.prepare("SELECT * FROM questions").all();
+    const insertTr = db.prepare(`
+      INSERT INTO question_translations (question_id, lang, question_text, section, options, suggestion_label)
+      VALUES (@question_id, @lang, @question_text, @section, @options, @suggestion_label)
+    `);
+    let written = 0;
+    db.withTransaction(() => {
+      for (const q of allQuestions) {
+        const tr = lookupTranslation(q);
+        if (!tr) continue;
+        for (const lang of Object.keys(tr)) {
+          insertTr.run({
+            question_id: q.id,
+            lang,
+            question_text: tr[lang].question_text || "",
+            section: tr[lang].section || "",
+            options: tr[lang].options ? JSON.stringify(tr[lang].options) : null,
+            suggestion_label: tr[lang].suggestion_label || "",
+          });
+          written++;
+        }
+      }
+    });
+    if (written > 0) {
+      console.log(`[INIT] 首次啟動，自動寫入 ${written} 筆內建英日文翻譯草稿（之後可於後台「題目管理」調整）`);
+    }
+  }
 });
+ 
