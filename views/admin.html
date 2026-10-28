@@ -165,6 +165,19 @@
           <button class="source-filter-btn" data-source="email">📧 電子郵件邀請</button>
           <button class="source-filter-btn" data-source="qrcode">📱 QR Code 掃碼</button>
         </div>
+        <div class="source-filter-row date-filter-row">
+          <span class="source-filter-label">期間篩選：</span>
+          <button class="date-filter-btn active" data-range="all">全部</button>
+          <button class="date-filter-btn" data-range="thisMonth">本月</button>
+          <button class="date-filter-btn" data-range="lastMonth">上月</button>
+          <button class="date-filter-btn" data-range="custom">自訂區間</button>
+          <span class="date-range-inputs" id="date-range-inputs" hidden>
+            <input type="date" id="date-from">
+            <span>～</span>
+            <input type="date" id="date-to">
+          </span>
+        </div>
+        <p class="hint date-range-hint" id="date-range-hint"></p>
         <h2 class="sub-heading" style="margin-top:8px;border-top:none;padding-top:0">量表滿意度分析</h2>
         <div id="analytics-likert"></div>
         <h2 class="sub-heading">其他題目分布（單選／多選）</h2>
