@@ -618,10 +618,26 @@ app.get("/api/admin/responses/:id", (req, res) => {
  
 app.get("/api/admin/analytics", (req, res) => {
   const sourceFilter = req.query.source || null; // 'email' | 'qrcode' | null = 全部
+  // from / to：台北當地日期（YYYY-MM-DD），用來做「全部 vs 區間」的逐月分析。
+  // submitted_at 以 UTC 儲存，比對前先 +8 小時換算成台北當地日期，避免午夜前後的筆數被算到前一天／後一天。
+  const fromDate = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || "") ? req.query.from : null;
+  const toDate = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to || "") ? req.query.to : null;
+
   const questions = db.prepare("SELECT * FROM questions ORDER BY order_index ASC, id ASC").all();
-  const answers = sourceFilter
-    ? db.prepare("SELECT a.* FROM answers a JOIN responses r ON r.id = a.response_id WHERE r.source = ?").all(sourceFilter)
+
+  const conditions = [];
+  const params = [];
+  if (sourceFilter) { conditions.push("r.source = ?"); params.push(sourceFilter); }
+  if (fromDate) { conditions.push("date(r.submitted_at, '+8 hours') >= date(?)"); params.push(fromDate); }
+  if (toDate) { conditions.push("date(r.submitted_at, '+8 hours') <= date(?)"); params.push(toDate); }
+  const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const answers = conditions.length
+    ? db.prepare(`SELECT a.* FROM answers a JOIN responses r ON r.id = a.response_id ${whereClause}`).all(...params)
     : db.prepare("SELECT * FROM answers").all();
+
+  // 回傳目前資料庫中最早／最晚一筆填寫的台北當地日期，給前端顯示「資料涵蓋範圍」參考用
+  const span = db.prepare("SELECT MIN(date(submitted_at, '+8 hours')) AS min_date, MAX(date(submitted_at, '+8 hours')) AS max_date FROM responses").get();
  
   // 以 question_id 建立索引（正常情況）
   const answersByQuestionId = new Map();
@@ -717,7 +733,13 @@ app.get("/api/admin/analytics", (req, res) => {
     return b.average - a.average;
   });
  
-  res.json({ likert, others, opentext });
+  res.json({
+    likert,
+    others,
+    opentext,
+    filter: { source: sourceFilter, from: fromDate, to: toDate },
+    data_span: { min_date: span.min_date, max_date: span.max_date },
+  });
 });
  
 app.post("/api/admin/send-invite", async (req, res) => {
