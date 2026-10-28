@@ -702,21 +702,30 @@ function renderOthersAnalytics(others) {
     return;
   }
 
-  others.forEach((q) => {
+  // 卡片＋細條狀長條圖的緊湊排版：兩欄並排，適合週報這種版面較窄、
+  // 但題目選項又多的情境——比逐行條列省版面，數字仍然清楚標示在每一條後面。
+  const cardsHtml = others.map((q) => {
     const total = Object.values(q.distribution).reduce((a, b) => a + b, 0);
-    const wrap = document.createElement("div");
-    wrap.className = "analytics-row";
+    const maxCount = Math.max(1, ...Object.values(q.distribution));
 
-    const lines = Object.entries(q.distribution)
-      .map(([opt, count]) => {
-        const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-        return `<div class="dist-line"><span>${escapeHtml(opt)}</span><span>${count} 筆（${pct}%）</span></div>`;
-      })
-      .join("");
+    const rowsHtml = Object.entries(q.distribution).map(([opt, count]) => {
+      const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+      const barPct = Math.round((count / maxCount) * 100);
+      return `<div class="others-bar-row">
+        <span class="others-bar-label" title="${escapeHtml(opt)}">${escapeHtml(opt)}</span>
+        <span class="others-bar-track"><span class="others-bar-fill" style="width:${barPct}%"></span></span>
+        <span class="others-bar-value">${count}（${pct}%）</span>
+      </div>`;
+    }).join("");
 
-    wrap.innerHTML = `<div class="analytics-label">${escapeHtml(q.question_text)}</div>${lines}`;
-    analyticsOthersEl.appendChild(wrap);
-  });
+    return `<div class="others-card">
+      <div class="others-card-title">${escapeHtml(q.question_text)}</div>
+      <div class="others-card-meta">共 ${total} 筆${q.type === "multichoice" ? "（可複選）" : ""}</div>
+      <div class="others-bars">${rowsHtml}</div>
+    </div>`;
+  }).join("");
+
+  analyticsOthersEl.innerHTML = `<div class="others-card-grid">${cardsHtml}</div>`;
 }
 
 function renderOpentextAnalytics(opentext) {
