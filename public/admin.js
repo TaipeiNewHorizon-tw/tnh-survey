@@ -503,15 +503,93 @@ document.querySelectorAll(".source-filter-btn").forEach((btn) => {
   });
 });
 
+// ---------- 統計分析：期間篩選（全部／本月／上月／自訂區間） ----------
+
+let analyticsRange = "all"; // 'all' | 'thisMonth' | 'lastMonth' | 'custom'
+let analyticsFrom = null;   // 'YYYY-MM-DD' 或 null
+let analyticsTo = null;
+
+const dateRangeInputsEl = document.getElementById("date-range-inputs");
+const dateFromInput = document.getElementById("date-from");
+const dateToInput = document.getElementById("date-to");
+const dateRangeHintEl = document.getElementById("date-range-hint");
+
+function pad2(n) { return String(n).padStart(2, "0"); }
+function fmtDate(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+
+// 回傳 [起始日期, 結束日期]（當地時間、含首尾兩天）
+function computeRangeDates(range) {
+  const now = new Date();
+  if (range === "thisMonth") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return [fmtDate(start), fmtDate(end)];
+  }
+  if (range === "lastMonth") {
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const end = new Date(now.getFullYear(), now.getMonth(), 0);
+    return [fmtDate(start), fmtDate(end)];
+  }
+  return [null, null];
+}
+
+document.querySelectorAll(".date-filter-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".date-filter-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    analyticsRange = btn.dataset.range;
+
+    if (analyticsRange === "custom") {
+      dateRangeInputsEl.hidden = false;
+      if (!dateFromInput.value || !dateToInput.value) {
+        const [s, e] = computeRangeDates("thisMonth");
+        dateFromInput.value = s;
+        dateToInput.value = e;
+      }
+      analyticsFrom = dateFromInput.value || null;
+      analyticsTo = dateToInput.value || null;
+    } else {
+      dateRangeInputsEl.hidden = true;
+      const [s, e] = computeRangeDates(analyticsRange);
+      analyticsFrom = s;
+      analyticsTo = e;
+    }
+    loadAnalytics();
+  });
+});
+
+[dateFromInput, dateToInput].forEach((el) => {
+  el.addEventListener("change", () => {
+    analyticsFrom = dateFromInput.value || null;
+    analyticsTo = dateToInput.value || null;
+    loadAnalytics();
+  });
+});
+
+function renderDateRangeHint(dataSpan) {
+  if (!dateRangeHintEl) return;
+  const rangeText = (analyticsFrom && analyticsTo)
+    ? `目前顯示：${analyticsFrom} ～ ${analyticsTo}`
+    : "目前顯示：全部期間";
+  const spanText = (dataSpan && dataSpan.min_date && dataSpan.max_date)
+    ? `（資料庫目前涵蓋 ${dataSpan.min_date} ～ ${dataSpan.max_date}）`
+    : "";
+  dateRangeHintEl.textContent = rangeText + spanText;
+}
+
 async function loadAnalytics() {
-  const url = analyticsSource
-    ? `/api/admin/analytics?source=${encodeURIComponent(analyticsSource)}`
-    : "/api/admin/analytics";
+  const params = new URLSearchParams();
+  if (analyticsSource) params.set("source", analyticsSource);
+  if (analyticsFrom) params.set("from", analyticsFrom);
+  if (analyticsTo) params.set("to", analyticsTo);
+  const qs = params.toString();
+  const url = qs ? `/api/admin/analytics?${qs}` : "/api/admin/analytics";
   const res = await fetch(url);
   const data = await res.json();
   renderLikertAnalytics(data.likert);
   renderOthersAnalytics(data.others);
   renderOpentextAnalytics(data.opentext || []);
+  renderDateRangeHint(data.data_span);
 }
 
 // 圓形圖顏色：最高分（非常滿意）→ 最低分（非常不滿意）
