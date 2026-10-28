@@ -701,6 +701,40 @@ textarea { resize: vertical; }
 .source-filter-btn:hover { background: var(--bg); border-color: var(--orange); color: #8a5000; }
 .source-filter-btn.active { background: var(--orange); color: #1a0a00; border-color: var(--orange); font-weight: 700; }
 
+/* Date range filter（統計分析：全部／本月／上月／自訂區間） */
+.date-filter-row { margin-bottom: 6px; }
+.date-filter-btn {
+  padding: 7px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  font-size: 15px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-2);
+  font-weight: 500;
+  transition: all 0.12s;
+}
+.date-filter-btn:hover { background: var(--bg); border-color: var(--orange); color: #8a5000; }
+.date-filter-btn.active { background: var(--orange); color: #1a0a00; border-color: var(--orange); font-weight: 700; }
+.date-range-inputs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+}
+.date-range-inputs input[type="date"] {
+  padding: 6px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text);
+}
+.date-range-inputs span { color: var(--text-3); font-size: 13px; }
+.date-range-hint { margin: 0 0 16px; }
+
 /* ────────────────── RESPONSE CARDS ────────────────── */
 
 .response-card {
