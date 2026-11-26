@@ -8,7 +8,8 @@
     "seed": "node seed.js",
     "reseed": "node reseed.js",
     "seed:translations": "node seed-translations.js",
-    "qrcode": "node generate-qrcode.js"
+    "qrcode": "node generate-qrcode.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=22.5.0"

@@ -26,7 +26,8 @@ npm start                   # http://localhost:3000 ，後台 /admin
 ## 部署（Railway）
 - `railway.json`：build 為 `npm install --omit=dev`，start 為 `npm start`。
 - **必須**掛載持久化 Volume，並把 `DB_PATH` 指到 Volume 內（例如 `/data/survey.db`），否則重新部署會清空資料庫。第一次部署後要在 Railway shell 執行一次 `npm run seed`。
-- **自動部署尚未設定**：push main 不會觸發 Railway。修法：Railway 專案連接 GitHub repo。
+- **自動部署：沒有，而且已確認要維持手動**（2026-11-26）。Railway 專案 `TNH-customet-survey`、服務 `TNH-customet-survey`，網址 `tnh-customet-survey-production.up.railway.app`（port 8080）。2026-10-28 起有一個「移除與 `TaipeiNewHorizon-tw/tnh-survey` repo 連結」的暫存變更一直沒套用；2026-11-26 依使用者決定**已套用**（非破壞性，服務、Volume `/data`、環境變數都沒動，也沒有觸發新部署，仍是 2026-10-28 那版在跑）。之後要更新線上版本，不能靠 push，要用 Railway CLI（`railway login` 後在本資料夾 `railway up`）或在後台手動上傳；想恢復自動部署就在後台重新連接 GitHub repo。
+- 目前已有的環境變數（只列名稱）：`ADMIN_PASSWORD`、`ADMIN_USER`、`DB_PATH`、`SESSION_SECRET`、`RESEND_API_KEY`、`NOTIFY_EMAIL_TO`、`NOTIFY_EMAIL_FROM`，以及已不再使用（舊 nodemailer 遺留）的 `NOTIFY_EMAIL_USER`、`NOTIFY_EMAIL_PASS`（可刪）。尚未有 `METRICS_TOKEN`、`SURVEY_URL`。
 - README 的範例寫的是 Render，實際平台是 Railway；兩者邏輯相同。
 
 ## 環境變數（只列名稱，值請在 Railway Variables 查）
@@ -46,8 +47,11 @@ npm start                   # http://localhost:3000 ，後台 /admin
 
 ## 給彙總儀表板用的 `/api/metrics`（2026-11-25 新增，尚未部署）
 - `GET /api/metrics`，需 `Authorization: Bearer <METRICS_TOKEN>`；**沒設環境變數 `METRICS_TOKEN` 時一律拒絕（503）**，金鑰錯誤回 401。
-- 回傳 `today_responses`（臺北時間）、`total_responses`、`latest_id`、`latest_at`、`survey_state`。只有數字與時間，沒有填寫內容或個資。
+- 回傳 `today_responses`（臺北時間）、`total_responses`、`latest_id`、`latest_at`、`survey_state`，以及給總表「量表滿意度分析」用的 `overall_avg`（整體平均分）、`very_satisfied_pct`（非常滿意平均占比）、`likert_response_count`（總回應筆數）——和後台「統計分析」分頁最上面三個指標是**同一個算法**（`computeAnalytics` 抽成共用函式，`likertKpi` 與 `public/admin.js` 的 `renderLikertAnalytics` 公式相同，**兩邊要一起改**）。沒有量表題或沒有資料時三個值為 `null`/`0`。只有數字與時間，沒有填寫內容或個資。統計有快取：筆數或最新編號一變就立刻重算，沒變化時最多 30 秒重算一次（管理者改題目最慢 30 秒反映）。
 - 部署時要在 Railway Variables 設 `METRICS_TOKEN`（長隨機字串），並把同一個值設在 `tnh-hub` 的 `SURVEY_METRICS_TOKEN`。見 `tnh-hub/CLAUDE.md`。
+
+- 後台支援 `/admin#responses`（也可 `#analytics`、`#questions`）直接開啟對應分頁，營運總表點「問卷」區塊就是用這個進到「填寫紀錄」。**要重新載入頁面才會生效**（同一頁只改錨點不會重跑）。
+- 測試：`npm test`（`test/metrics.test.js`）：金鑰保護、沒有資料時為空、新問卷進來後數字**立即**更新、並且與後台統計分頁用同一公式算出來的數字完全一致。
 
 ## 已知小問題（讀程式碼／測試時發現，未處理）
 - `app.use("/api/admin", requireAuth)` 掛載後 `req.path` 不含 `/api/`，所以未登入呼叫後台 API 會被 302 導向 `/login`，而不是回 401 JSON。資料仍受保護，只是回應型態不如預期；`requireAuth` 內改用 `req.originalUrl` 判斷即可。
@@ -55,7 +59,7 @@ npm start                   # http://localhost:3000 ，後台 /admin
 ## 待辦清單（與專案檢討文件一致）
 1. Railway ↔ GitHub 自動部署。
 2. ~~移除未使用的 `nodemailer` 套件~~（2026-11-25 已從 package.json 與 package-lock.json 移除；尚未部署、未實際啟動驗證）。
-3. Railway 上卡超過一個月的「暫存變更」要確認後套用或捨棄。
+3. ~~Railway 上卡超過一個月的「暫存變更」~~（2026-11-26 已套用，見上方「部署」）。
 4. ~~補齊 `.env.example`~~（2026-11-25 已補上 SESSION_SECRET、RESEND_API_KEY、NOTIFY_EMAIL_TO、NOTIFY_EMAIL_FROM、SURVEY_URL）。
 5. ~~後台「系統說明」分頁壞掉~~（2026-11-25 已修：連結本身沒壞，`/docs.html` 由 `public/` 靜態提供、後台以 iframe 載入；壞的是頁內「目前問卷題目結構」，因為 `docs.html` 把後台 API 已解析成陣列的 `options` 再 `JSON.parse`，遇到單選題就丟例外而顯示「無法讀取題目資料」，已改為同時接受陣列與字串，並修正「已下架」判斷。本機驗證 15 題都顯示；尚未部署）。
    - 注意：`/docs.html` 不需登入就能開（頁面刻意設計成未登入時退回公開題目 API），內容是系統說明與上架題目結構，不含回覆資料。若想只給後台看，要把它移到 `views/` 並加 `requireAuth` 路由。

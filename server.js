@@ -245,8 +245,19 @@ app.get("/api/metrics", metricsAuth, (req, res) => {
     latest_id: latest ? latest.id : 0,
     latest_at: latest ? latest.submitted_at.replace(" ", "T") + "Z" : null,
     survey_state: getSurveyStatus().state,
+    ...getKpiCached(`${latest ? latest.id : 0}:${total}`),
   });
 });
+
+// 總表每 10 秒就會來問一次，統計要掃全部答案，所以沒有新問卷（筆數與最新編號都沒變）時最多每 30 秒才重算一次；
+// 一有新問卷就立刻重算。管理者改題目不會改變這個鍵，最慢 30 秒後反映。
+let kpiCache = { key: null, at: 0, value: null };
+function getKpiCached(key) {
+  if (!kpiCache.value || kpiCache.key !== key || Date.now() - kpiCache.at > 30000) {
+    kpiCache = { key, at: Date.now(), value: likertKpi(computeAnalytics({}).likert) };
+  }
+  return kpiCache.value;
+}
 
 // ---------- 公開 API：填寫頁面 ----------
 
@@ -713,12 +724,14 @@ app.get("/api/admin/responses/:id", (req, res) => {
   res.json({ ...response, answers });
 });
  
-app.get("/api/admin/analytics", (req, res) => {
-  const sourceFilter = req.query.source || null; // 'email' | 'qrcode' | null = 全部
+// 統計分析的計算：後台「統計分析」分頁（/api/admin/analytics）與給營運總表用的 /api/metrics 共用同一套，
+// 這樣總表上的數字和後台一定一致。
+function computeAnalytics(query) {
+  const sourceFilter = query.source || null; // 'email' | 'qrcode' | null = 全部
   // from / to：台北當地日期（YYYY-MM-DD），用來做「全部 vs 區間」的逐月分析。
   // submitted_at 以 UTC 儲存，比對前先 +8 小時換算成台北當地日期，避免午夜前後的筆數被算到前一天／後一天。
-  const fromDate = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || "") ? req.query.from : null;
-  const toDate = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to || "") ? req.query.to : null;
+  const fromDate = /^\d{4}-\d{2}-\d{2}$/.test(query.from || "") ? query.from : null;
+  const toDate = /^\d{4}-\d{2}-\d{2}$/.test(query.to || "") ? query.to : null;
 
   const questions = db.prepare("SELECT * FROM questions ORDER BY order_index ASC, id ASC").all();
 
@@ -830,14 +843,35 @@ app.get("/api/admin/analytics", (req, res) => {
     return b.average - a.average;
   });
  
-  res.json({
+  return {
     likert,
     others,
     opentext,
     filter: { source: sourceFilter, from: fromDate, to: toDate },
     data_span: { min_date: span.min_date, max_date: span.max_date },
-  });
+  };
+}
+
+app.get("/api/admin/analytics", (req, res) => {
+  res.json(computeAnalytics(req.query));
 });
+
+// 後台「統計分析」分頁最上面三個指標（整體平均分、非常滿意平均占比、總回應筆數）。
+// 公式與 public/admin.js 的 renderLikertAnalytics 相同，兩邊要一起改。
+function likertKpi(likert) {
+  const scored = likert.filter((q) => q.average !== null);
+  if (!scored.length) return { overall_avg: null, very_satisfied_pct: null, likert_response_count: 0 };
+  const totalResp = Math.max(...scored.map((q) => q.response_count));
+  const overallAvg = Number((scored.reduce((s, q) => s + parseFloat(q.average), 0) / scored.length).toFixed(1));
+  let vsCount = 0, vsTotal = 0;
+  scored.forEach((q) => {
+    const entries = Object.entries(q.distribution);
+    if (entries.length > 0) vsCount += entries[0][1]; // 非常滿意（第一項）
+    vsTotal += Object.values(q.distribution).reduce((a, b) => a + b, 0);
+  });
+  const vsPct = vsTotal > 0 ? Math.round((vsCount / vsTotal) * 100) : 0;
+  return { overall_avg: overallAvg, very_satisfied_pct: vsPct, likert_response_count: totalResp };
+}
  
 app.post("/api/admin/send-invite", async (req, res) => {
   if (!resend) {

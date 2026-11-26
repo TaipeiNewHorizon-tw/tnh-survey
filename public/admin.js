@@ -28,6 +28,10 @@ async function initAdmin() {
   checkUnread();
   setInterval(checkUnread, 60_000);
   initWeatherClock();
+
+  // 營運總表可以用 /admin#responses 直接開啟某個分頁
+  const hashTab = (location.hash || "").slice(1);
+  if (["responses", "analytics", "questions"].includes(hashTab)) switchTab(hashTab);
 }
 
 // ---------- 頂部：所在城市 / 日期時間 / 天氣（自動偵測，無需設定） ----------
