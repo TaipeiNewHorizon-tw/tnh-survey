@@ -16,6 +16,7 @@
  
 require("dotenv").config();
 const path = require("path");
+const crypto = require("crypto");
 const express = require("express");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
@@ -186,8 +187,74 @@ function validateQuestionPayload(body) {
   return null;
 }
  
+// ---------- 問卷開放時間 ----------
+// 存在 settings 表：survey_open_at / survey_close_at，格式 "YYYY-MM-DDTHH:MM"，一律視為臺北時間（UTC+8，無日光節約）。
+// 空字串 = 不限制。目前時間 < 開放時間 → not_open；目前時間 >= 結束時間 → closed；其餘 open。
+
+const SURVEY_WINDOW_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
+function taipeiMs(s) {
+  return Date.parse(s + ":00+08:00");
+}
+
+function getSurveyWindow() {
+  const rows = db.prepare("SELECT key, value FROM settings WHERE key IN ('survey_open_at', 'survey_close_at')").all();
+  const m = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  return { open_at: m.survey_open_at || "", close_at: m.survey_close_at || "" };
+}
+
+function getSurveyStatus(now = Date.now()) {
+  const w = getSurveyWindow();
+  let state = "open";
+  if (w.open_at && now < taipeiMs(w.open_at)) state = "not_open";
+  else if (w.close_at && now >= taipeiMs(w.close_at)) state = "closed";
+  return { state, open_at: w.open_at, close_at: w.close_at };
+}
+
+const SURVEY_CLOSED_MESSAGES = {
+  not_open: { zh: "問卷尚未開放填寫", en: "This survey is not open yet.", ja: "アンケートはまだ開始されていません" },
+  closed: { zh: "問卷已結束填寫", en: "This survey is now closed.", ja: "アンケートの受付は終了しました" },
+};
+
+// ---------- 彙總儀表板（tnh-hub）用的唯讀計數 ----------
+// 只回傳數字與時間，不含任何填寫內容或個資。需要 Authorization: Bearer <METRICS_TOKEN>；
+// 沒設定 METRICS_TOKEN 時一律拒絕（fail closed）。「今日」以臺北時間（UTC+8）計。
+
+function metricsAuth(req, res, next) {
+  const expected = process.env.METRICS_TOKEN;
+  if (!expected) return res.status(503).json({ error: "尚未設定 METRICS_TOKEN" });
+  const m = /^Bearer (.+)$/.exec(req.headers.authorization || "");
+  const given = crypto.createHash("sha256").update(m ? m[1] : "").digest();
+  const want = crypto.createHash("sha256").update(expected).digest();
+  if (!crypto.timingSafeEqual(given, want)) return res.status(401).json({ error: "unauthorized" });
+  next();
+}
+
+app.get("/api/metrics", metricsAuth, (req, res) => {
+  res.set("Cache-Control", "no-store");
+  const today = db.prepare(
+    "SELECT COUNT(*) AS n FROM responses WHERE date(submitted_at, '+8 hours') = date('now', '+8 hours')"
+  ).get().n;
+  const total = db.prepare("SELECT COUNT(*) AS n FROM responses").get().n;
+  const latest = db.prepare("SELECT id, submitted_at FROM responses ORDER BY id DESC LIMIT 1").get();
+  res.json({
+    system: "survey",
+    now: new Date().toISOString(),
+    today_responses: today,
+    total_responses: total,
+    latest_id: latest ? latest.id : 0,
+    latest_at: latest ? latest.submitted_at.replace(" ", "T") + "Z" : null,
+    survey_state: getSurveyStatus().state,
+  });
+});
+
 // ---------- 公開 API：填寫頁面 ----------
- 
+
+app.get("/api/survey-status", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json(getSurveyStatus());
+});
+
 app.get("/api/questions", (req, res) => {
   const lang = SUPPORTED_LANGS.includes(req.query.lang) ? req.query.lang : null;
   const rows = db
@@ -200,7 +267,12 @@ app.get("/api/questions", (req, res) => {
 app.post("/api/responses", (req, res) => {
   const { answers, source } = req.body;
   const lang = ALL_LANGS.includes(req.body.lang) ? req.body.lang : "zh";
- 
+
+  const status = getSurveyStatus();
+  if (status.state !== "open") {
+    return res.status(403).json({ error: SURVEY_CLOSED_MESSAGES[status.state][lang], code: status.state });
+  }
+
   if (!Array.isArray(answers) || answers.length === 0) {
     const msg = { zh: "answers 不能為空", en: "answers must not be empty", ja: "answers は空にできません" }[lang];
     return res.status(400).json({ error: msg });
@@ -368,6 +440,31 @@ app.post("/api/admin/settings/delete-password", requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
  
+// ---------- 問卷開放時間設定 ----------
+
+app.get("/api/admin/settings/survey-window", (req, res) => {
+  res.json(getSurveyStatus());
+});
+
+app.put("/api/admin/settings/survey-window", requireAdmin, (req, res) => {
+  const body = req.body || {};
+  const openAt = typeof body.open_at === "string" ? body.open_at.trim() : "";
+  const closeAt = typeof body.close_at === "string" ? body.close_at.trim() : "";
+  for (const [label, v] of [["開放時間", openAt], ["結束時間", closeAt]]) {
+    if (v && (!SURVEY_WINDOW_RE.test(v) || Number.isNaN(taipeiMs(v)))) {
+      return res.status(400).json({ error: `${label}格式不正確` });
+    }
+  }
+  if (openAt && closeAt && taipeiMs(closeAt) <= taipeiMs(openAt)) {
+    return res.status(400).json({ error: "結束時間必須晚於開放時間" });
+  }
+  const upsert = db.prepare("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))");
+  upsert.run("survey_open_at", openAt);
+  upsert.run("survey_close_at", closeAt);
+  auditLog(req, "CHANGE_SURVEY_WINDOW", null, `open=${openAt || "不限"}, close=${closeAt || "不限"}`);
+  res.json(getSurveyStatus());
+});
+
 // ---------- 操作紀錄（管理員專用） ----------
  
 app.get("/api/admin/audit-logs", requireAdmin, (req, res) => {

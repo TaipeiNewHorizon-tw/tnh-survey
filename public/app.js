@@ -83,6 +83,36 @@ function applyStaticText() {
   setLinkText("social-app-google", t.socialAppGoogle);
   setLinkText("social-fb", t.socialFb);
   setLinkText("social-ig", t.socialIg);
+
+  applyStatusView();
+}
+
+// ---------- 開放時間 ----------
+// 後端在送出時會再檢查一次；這裡只是讓不在開放期間的人一開始就看到說明，而不是填完才被擋。
+
+let surveyStatus = { state: "open", open_at: "", close_at: "" };
+
+async function loadSurveyStatus() {
+  try {
+    const res = await fetch("/api/survey-status");
+    if (res.ok) surveyStatus = await res.json();
+  } catch (_) {}
+  applyStatusView();
+}
+
+function applyStatusView() {
+  const noticeEl = document.getElementById("closed-notice");
+  if (!noticeEl) return;
+  if (surveyStatus.state === "open") {
+    noticeEl.hidden = true;
+    return;
+  }
+  const t = SURVEY_STRINGS[currentLang];
+  noticeEl.textContent = surveyStatus.state === "not_open"
+    ? t.notOpenNotice.replace("{time}", surveyStatus.open_at.replace("T", " "))
+    : t.closedNotice;
+  noticeEl.hidden = false;
+  formEl.hidden = true;
 }
 
 function setLinkText(id, text) {
@@ -249,3 +279,4 @@ document.documentElement.lang = SURVEY_STRINGS[currentLang].htmlLang;
 applyStaticText();
 renderLangSwitcher();
 loadQuestions();
+loadSurveyStatus();

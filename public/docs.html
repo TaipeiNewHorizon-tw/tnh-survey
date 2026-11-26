@@ -356,6 +356,16 @@ const TYPE_LABELS = {
   multichoice: '多選',
 };
 
+// API 回傳的 options 可能是陣列（目前）或 JSON 字串（舊格式）；active 可能是布林或 0/1
+function parseOptions(v) {
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string' && v) {
+    try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch (e) { return []; }
+  }
+  return [];
+}
+function isInactive(q) { return q.active === false || q.active === 0; }
+
 async function loadQuestions() {
   const el = document.getElementById('questions-output');
   try {
@@ -385,9 +395,10 @@ async function loadQuestions() {
       qs.forEach(q => {
         const typeLabel = TYPE_LABELS[q.type] || q.type;
         const reqBadge = q.required ? '<span class="q-badge required">必填</span>' : '';
-        const inactiveBadge = q.active === 0 ? '<span class="q-badge inactive">已下架</span>' : '';
-        const optionNote = (q.type === 'choice' || q.type === 'multichoice') && q.options
-          ? `<div style="margin-top:5px;font-size:12px;color:var(--text-3)">選項：${JSON.parse(q.options).join('、')}</div>` : '';
+        const inactiveBadge = isInactive(q) ? '<span class="q-badge inactive">已下架</span>' : '';
+        const opts = parseOptions(q.options);
+        const optionNote = (q.type === 'choice' || q.type === 'multichoice') && opts.length
+          ? `<div style="margin-top:5px;font-size:12px;color:var(--text-3)">選項：${opts.map(escHtml).join('、')}</div>` : '';
         html += `<div class="q-item">
           <div class="q-num">${num++}</div>
           <div class="q-content">
@@ -404,7 +415,7 @@ async function loadQuestions() {
 
     // 統計
     const total = questions.length;
-    const active = questions.filter(q => q.active !== 0).length;
+    const active = questions.filter(q => !isInactive(q)).length;
     html += `<p style="font-size:13px;color:var(--text-3);margin-top:12px">共 ${total} 題（上架中 ${active} 題）</p>`;
     el.innerHTML = html;
   } catch (e) {

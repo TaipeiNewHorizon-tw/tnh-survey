@@ -342,6 +342,7 @@ label.checkbox-row input { margin: 0; cursor: pointer; accent-color: var(--indig
 
 input[type="text"],
 input[type="password"],
+input[type="datetime-local"],
 select,
 textarea {
   width: 100%;
@@ -357,6 +358,7 @@ textarea {
 }
 input[type="text"]:focus,
 input[type="password"]:focus,
+input[type="datetime-local"]:focus,
 select:focus,
 textarea:focus {
   border-color: var(--orange);

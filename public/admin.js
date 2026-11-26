@@ -210,6 +210,7 @@ function switchTab(tabId) {
       loadResponseList();
     }
   }
+  if (tabId === "window") loadSurveyWindow();
   if (tabId === "users") loadUserList();
   if (tabId === "auditlog") { auditOffset = 0; loadAuditLog(); }
 }
@@ -1137,6 +1138,7 @@ const ACTION_LABELS = {
   DELETE_RESPONSE: "刪除填寫紀錄", ADD_USER: "新增帳號",
   EDIT_USER: "編輯帳號", DELETE_USER: "刪除帳號",
   CHANGE_DELETE_PASSWORD: "變更刪除密碼", SEND_INVITE: "發送邀請",
+  CHANGE_SURVEY_WINDOW: "變更問卷開放時間",
 };
 
 async function loadAuditLog() {
@@ -1214,6 +1216,69 @@ inviteSendBtn.addEventListener("click", async () => {
     inviteResultEl.hidden = false;
   }
 });
+
+// ---------- 問卷開放時間 ----------
+
+const SURVEY_STATE_LABEL = {
+  open: "🟢 目前開放填寫中",
+  not_open: "🟡 尚未開放（時間未到）",
+  closed: "🔴 已結束填寫",
+};
+
+function applySurveyWindow(data) {
+  document.getElementById("window-open").value = data.open_at || "";
+  document.getElementById("window-close").value = data.close_at || "";
+  const range = data.open_at || data.close_at
+    ? `（開放：${data.open_at ? data.open_at.replace("T", " ") : "不限"}　結束：${data.close_at ? data.close_at.replace("T", " ") : "不限"}）`
+    : "（未設定時間，隨時可填寫）";
+  document.getElementById("window-status").textContent = `${SURVEY_STATE_LABEL[data.state] || ""} ${range}`;
+}
+
+function showWindowMsg(text, isError) {
+  const el = document.getElementById("window-msg");
+  el.textContent = text;
+  el.style.color = isError ? "#CF1322" : "";
+  el.hidden = !text;
+}
+
+async function loadSurveyWindow() {
+  showWindowMsg("", false);
+  const isAdmin = currentUser && currentUser.role === "admin";
+  document.getElementById("window-save-btn").disabled = !isAdmin;
+  document.getElementById("window-clear-btn").disabled = !isAdmin;
+  document.getElementById("window-open").disabled = !isAdmin;
+  document.getElementById("window-close").disabled = !isAdmin;
+  document.getElementById("window-admin-note").hidden = isAdmin;
+  try {
+    const res = await fetch("/api/admin/settings/survey-window");
+    if (!res.ok) throw new Error();
+    applySurveyWindow(await res.json());
+  } catch {
+    document.getElementById("window-status").textContent = "無法讀取目前設定，請重新整理。";
+  }
+}
+
+async function saveSurveyWindow(openAt, closeAt) {
+  showWindowMsg("", false);
+  try {
+    const res = await fetch("/api/admin/settings/survey-window", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ open_at: openAt, close_at: closeAt }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "儲存失敗");
+    applySurveyWindow(data);
+    showWindowMsg("已儲存", false);
+  } catch (err) {
+    showWindowMsg(err.message || "儲存失敗", true);
+  }
+}
+
+document.getElementById("window-save-btn").addEventListener("click", () => {
+  saveSurveyWindow(document.getElementById("window-open").value, document.getElementById("window-close").value);
+});
+document.getElementById("window-clear-btn").addEventListener("click", () => saveSurveyWindow("", ""));
 
 // ---------- 啟動 ----------
 initAdmin();

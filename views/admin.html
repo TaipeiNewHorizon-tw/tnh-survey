@@ -42,6 +42,7 @@
       <button class="tab-btn" data-tab="analytics"><span class="ni">📊</span><span>統計分析</span></button>
       <button class="tab-btn" data-tab="responses"><span class="ni">📝</span><span>填寫紀錄 <span id="unread-badge" class="unread-badge" hidden></span></span></button>
       <button class="tab-btn" data-tab="invite"><span class="ni">📧</span><span>發送邀請</span></button>
+      <button class="tab-btn" data-tab="window"><span class="ni">⏰</span><span>開放時間</span></button>
       <button class="tab-btn" data-tab="docs"><span class="ni">📖</span><span>系統說明</span></button>
 
       <div class="nav-divider admin-only-tab" hidden></div>
@@ -233,6 +234,30 @@ https://www.taipeinewhorizon.com.tw/venues</textarea>
           <span id="resp-page-info"></span>
           <button type="button" id="resp-next" class="btn btn-secondary">下一頁</button>
         </div>
+      </div>
+    </div>
+
+    <!-- 開放時間 -->
+    <div class="tab-panel" id="tab-window">
+      <div class="page-header">
+        <h1>問卷開放時間</h1>
+        <p class="hint">設定填寫頁的開放與結束時間（臺北時間）。不在期間內時，填寫頁會顯示說明並無法送出。兩欄都留空 = 不限制。</p>
+      </div>
+      <div class="panel">
+        <p id="window-status" class="hint">載入中...</p>
+
+        <label for="window-open">開放時間（選填）</label>
+        <input type="datetime-local" id="window-open">
+
+        <label for="window-close">結束時間（選填）</label>
+        <input type="datetime-local" id="window-close">
+
+        <div class="btn-row">
+          <button type="button" id="window-save-btn" class="btn btn-primary">儲存</button>
+          <button type="button" id="window-clear-btn" class="btn btn-secondary">清除（不限制）</button>
+        </div>
+        <p id="window-msg" class="hint" hidden></p>
+        <p id="window-admin-note" class="hint" hidden>只有管理員可以修改開放時間。</p>
       </div>
     </div>
 
